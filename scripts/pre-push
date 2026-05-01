@@ -1,0 +1,11 @@
+#!/bin/sh
+while read local_ref local_sha remote_ref remote_sha; do
+  if echo "$remote_ref" | grep -q "refs/heads/main"; then
+    echo ""
+    echo "  ERROR: Direct push to 'main' is not allowed."
+    echo "  Push to your own branch and open a Pull Request instead."
+    echo ""
+    exit 1
+  fi
+done
+exit 0

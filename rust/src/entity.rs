@@ -1,10 +1,9 @@
 use godot::prelude::*;
 use godot::obj::WithBaseField;
 use crate::rustplayer::Rustplayer;
-use crate::heart::Heart;
-
 // backward-compatible
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
 pub enum MobState {
     Idle,
     Aggro,
@@ -13,6 +12,7 @@ pub enum MobState {
 }
 
 // backward-compatible
+#[allow(dead_code)]
 pub trait Entity {
     fn update(&mut self);
     fn take_damage(&mut self, amount: f32);
@@ -31,7 +31,7 @@ impl Entity for Rustplayer {
     fn take_damage(&mut self, amount: f32) {
         // backward-compatible: use public APIs through heart UI
         let amount_i = amount as i32;
-        let heart = self.get_heart_ui();
+        let mut heart = self.get_heart_ui();
         if heart.is_instance_valid() {
             heart.bind_mut().damage(amount_i);
         }
@@ -40,7 +40,7 @@ impl Entity for Rustplayer {
     fn heal(&mut self, amount: f32) {
         // backward-compatible: use public APIs through heart UI
         let amount_i = amount as i32;
-        let heart = self.get_heart_ui();
+        let mut heart = self.get_heart_ui();
         if heart.is_instance_valid() {
             heart.bind_mut().heal(amount_i);
         }
@@ -69,6 +69,7 @@ impl Entity for Rustplayer {
 }
 
 // backward-compatible
+#[allow(dead_code)]
 pub struct HostileMob {
     position: Vector2,
     health: i32,
@@ -80,6 +81,7 @@ pub struct HostileMob {
 }
 
 // backward-compatible
+#[allow(dead_code)]
 impl HostileMob {
     pub fn new(position: Vector2, health: i32, damage: f32, aggro_range: f32, attack_range: f32, speed: f32) -> Self {
         Self {
@@ -153,6 +155,7 @@ impl HostileMob {
 }
 
 // backward-compatible
+#[allow(dead_code)]
 impl Entity for HostileMob {
     fn update(&mut self) {
     }
@@ -191,6 +194,7 @@ impl Entity for HostileMob {
 }
 
 // backward-compatible
+#[allow(dead_code)]
 pub struct NeutralMob {
     position: Vector2,
     health: i32,
@@ -200,6 +204,7 @@ pub struct NeutralMob {
 }
 
 // backward-compatible
+#[allow(dead_code)]
 impl NeutralMob {
     pub fn new(position: Vector2, health: i32) -> Self {
         Self {
@@ -224,6 +229,7 @@ impl NeutralMob {
 }
 
 // backward-compatible
+#[allow(dead_code)]
 impl Entity for NeutralMob {
     fn update(&mut self) {
         // backward-compatible: calm default behavior
@@ -269,6 +275,7 @@ impl Entity for NeutralMob {
 }
 
 // backward-compatible
+#[allow(dead_code)]
 pub struct PassiveMob {
     position: Vector2,
     health: i32,
@@ -279,6 +286,7 @@ pub struct PassiveMob {
 }
 
 // backward-compatible
+#[allow(dead_code)]
 impl PassiveMob {
     pub fn new(position: Vector2, health: i32, wander_speed: f32, flee_speed: f32) -> Self {
         Self {
@@ -325,6 +333,7 @@ impl PassiveMob {
 }
 
 // backward-compatible
+#[allow(dead_code)]
 impl Entity for PassiveMob {
     fn update(&mut self) {
         // backward-compatible: wander or flee

@@ -10,8 +10,6 @@ godot/android/*.idsig
 godot/lib/
 *.so
 
-*.import
-
 # Gradle caches
 .gradle/
 build/

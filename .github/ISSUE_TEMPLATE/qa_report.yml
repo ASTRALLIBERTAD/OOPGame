@@ -1,0 +1,215 @@
+name: "QA Test Report"
+description: "Submit a QA test report for a build, feature, or release."
+title: "[QA] <Project> — v<Version> — <Environment>"
+labels: ["qa", "testing"]
+assignees: []
+
+body:
+
+  - type: input
+    id: project
+    attributes:
+      label: "Project / Feature"
+      placeholder: "e.g. Auth Module, Checkout Flow, v2.4.1 Release"
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: "Build / Version"
+      placeholder: "e.g. v2.4.1, commit abc1234, PR #88"
+    validations:
+      required: true
+
+  - type: input
+    id: tester
+    attributes:
+      label: "Tester"
+      placeholder: "GitHub username or full name"
+    validations:
+      required: true
+
+  - type: input
+    id: date
+    attributes:
+      label: "Test Date"
+      placeholder: "YYYY-MM-DD"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: environment
+    attributes:
+      label: "Environment"
+      options:
+        - Local
+        - Staging
+        - UAT
+        - Production
+    validations:
+      required: true
+
+  - type: input
+    id: ticket
+    attributes:
+      label: "Linked Ticket / PR"
+      placeholder: "e.g. #42, JIRA-301, https://github.com/org/repo/pull/88"
+
+  - type: markdown
+    attributes:
+      value: "## Functional Testing"
+
+  - type: checkboxes
+    id: functional
+    attributes:
+      label: "Functional Checks"
+      options:
+        - label: "All features work as per the requirements / spec"
+        - label: "Edge cases and boundary inputs are handled correctly"
+        - label: "Error messages are clear and actionable"
+        - label: "Form validations trigger as expected"
+        - label: "CRUD operations behave correctly end-to-end"
+        - label: "Navigation and routing work without broken links"
+
+  - type: textarea
+    id: functional_notes
+    attributes:
+      label: "Functional — Notes / Failures"
+      placeholder: "List any failures, steps to reproduce, or observations..."
+      render: markdown
+
+  - type: markdown
+    attributes:
+      value: "## UI / UX"
+
+  - type: checkboxes
+    id: ui
+    attributes:
+      label: "UI / UX Checks"
+      options:
+        - label: "UI matches the approved design / mockup"
+        - label: "Responsive layout works on mobile, tablet, and desktop"
+        - label: "No visual regressions from previous build"
+        - label: "Interactive states (hover, focus, disabled) render correctly"
+        - label: "Loading and empty states are handled gracefully"
+        - label: "Accessibility: keyboard nav and ARIA labels present"
+
+  - type: textarea
+    id: ui_notes
+    attributes:
+      label: "UI / UX — Notes / Failures"
+      placeholder: "Attach screenshots or screen recordings where relevant..."
+      render: markdown
+
+  - type: markdown
+    attributes:
+      value: "## Performance"
+
+  - type: checkboxes
+    id: performance
+    attributes:
+      label: "Performance Checks"
+      options:
+        - label: "Page load time is within acceptable threshold (<3s)"
+        - label: "No memory leaks during extended usage"
+        - label: "API response times are within SLA"
+        - label: "Assets are optimized (images, bundles, fonts)"
+        - label: "No unnecessary re-renders or blocking operations"
+
+  - type: textarea
+    id: performance_notes
+    attributes:
+      label: "Performance — Notes / Failures"
+      placeholder: "Include Lighthouse scores, profiler output, or timing data..."
+      render: markdown
+
+  - type: markdown
+    attributes:
+      value: "## Security"
+
+  - type: checkboxes
+    id: security
+    attributes:
+      label: "Security Checks"
+      options:
+        - label: "Auth / session tokens are not exposed client-side"
+        - label: "Input fields are sanitized against XSS / SQLi"
+        - label: "API endpoints enforce proper authorization"
+        - label: "Sensitive data is not logged or leaked to console"
+        - label: "HTTPS enforced; no mixed content warnings"
+
+  - type: textarea
+    id: security_notes
+    attributes:
+      label: "Security — Notes / Failures"
+      placeholder: "Describe any vulnerabilities or suspicious behavior found..."
+      render: markdown
+
+  - type: markdown
+    attributes:
+      value: "## Integration & API"
+
+  - type: checkboxes
+    id: integration
+    attributes:
+      label: "Integration & API Checks"
+      options:
+        - label: "All API endpoints return correct status codes"
+        - label: "Request payloads match the contract / spec"
+        - label: "Error responses from API are handled in the UI"
+        - label: "Third-party integrations (auth, payments, etc.) tested"
+        - label: "Webhooks or async events fire and process correctly"
+
+  - type: textarea
+    id: integration_notes
+    attributes:
+      label: "Integration & API — Notes / Failures"
+      placeholder: "Paste curl outputs, Postman results, or error logs..."
+      render: markdown
+
+  - type: markdown
+    attributes:
+      value: "## Regression"
+
+  - type: checkboxes
+    id: regression
+    attributes:
+      label: "Regression Checks"
+      options:
+        - label: "Previously fixed bugs have not resurfaced"
+        - label: "Core user flows pass end-to-end smoke tests"
+        - label: "No new console errors introduced by this build"
+        - label: "Existing unit / integration tests all pass"
+
+  - type: textarea
+    id: regression_notes
+    attributes:
+      label: "Regression — Notes / Failures"
+      placeholder: "Reference any previously closed issues that resurfaced..."
+      render: markdown
+
+  - type: markdown
+    attributes:
+      value: "## Overall Verdict"
+
+  - type: dropdown
+    id: verdict
+    attributes:
+      label: "Result"
+      options:
+        - "PASS — Ready to ship"
+        - "FAIL — Blocking issues found"
+        - "PASS WITH NOTES — Minor issues, non-blocking"
+        - "INCOMPLETE — Testing not finished"
+    validations:
+      required: true
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: "Summary"
+      placeholder: "Brief summary of the test cycle. What passed, what failed, what was skipped and why..."
+      render: markdown
+    validations:
+      required: true

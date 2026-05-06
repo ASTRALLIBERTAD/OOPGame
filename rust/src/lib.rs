@@ -15,6 +15,7 @@ mod heart;
 mod heart_display;
 mod example_terrrain;
 mod node_manager;
+mod entity;
 
 use godot::prelude::*;
 

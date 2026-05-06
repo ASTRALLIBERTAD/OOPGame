@@ -58,31 +58,31 @@ impl Heart {
         let half_heart: &Gd<Texture2D> = self.half_heart.to_godot();
         let empty_heart: &Gd<Texture2D> = self.empty_heart.to_godot();
 
-    // ✅ Apply half-heart system (1 = half heart)
+    //   Apply half-heart system (1 = half heart)
         self.current_health = (self.current_health + change).clamp(0, 20);
  
         godot_print!("current health (HP): {:?}", self.current_health);
 
-    // ✅ Convert HP → heart visuals
+    //  Convert HP → heart visuals
         let mut remaining_hp = self.current_health;
 
         for heart in &mut self.heart_list {
             let mut heart_node = heart.bind_mut();
 
             if remaining_hp >= 2 {
-            // ❤️ full heart
+            //  full heart
                 heart_node.set_health(2);
                 heart_node.base_mut().set_texture(&full_heart.clone());
                 remaining_hp -= 2;
 
             } else if remaining_hp == 1 {
-            // 💔 half heart
+            //  half heart
                 heart_node.set_health(1);
                 heart_node.base_mut().set_texture(&half_heart.clone());
                  remaining_hp -= 1;
 
             } else {
-            // 🖤 empty
+            //  empty
                  heart_node.set_health(0);
                  heart_node.base_mut().set_texture(&empty_heart.clone());
         }

@@ -117,11 +117,11 @@ impl ICharacterBody2D for Rustplayer {
 
             if input.is_action_just_pressed(&StringName::from_str("left").unwrap()) {
                 self.sprite.set_flip_h(true);
-                self.heart_ui.bind_mut().heal(1);
+                self.heart_ui.bind_mut().set_heart_display(1);
             }
             if input.is_action_just_pressed(&StringName::from_str("right").unwrap()) {
                 self.sprite.set_flip_h(false);
-                self.heart_ui.bind_mut().damage(10);
+                self.heart_ui.bind_mut().set_heart_display(-10);
             }
 
             self.base_mut().set_velocity(velocity);
@@ -268,7 +268,7 @@ impl Rustplayer {
 
     #[func]
     pub fn set_health(&mut self, health: i32) {
-        self.heart_ui.bind_mut().heal(health);
+        self.heart_ui.bind_mut().set_heart_display(health);
         self.health = health;
     }
 

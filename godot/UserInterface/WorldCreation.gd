@@ -16,7 +16,7 @@ func _on_timer_timeout() -> void:
 		#print("world name already exist")
 		#return
 	
-	var world = preload("res://World.scn").instantiate() #res://World.tscn
+	var world = preload("res://world/World.scn").instantiate() #res://World.tscn
 	if !get_tree() == null:
 		if GameSeed.is_valid_int():
 			RustSaveManager1.world_seed = int(GameSeed)

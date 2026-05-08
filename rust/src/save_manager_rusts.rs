@@ -33,9 +33,6 @@ pub struct SaveManagerRust {
 
     current_world_name: StringName,
 
-    // #[export]
-    // #[var(get = get_load_game, set = set_load_game)]
-    // load_game: GString,
     #[export]
     #[var(get = get_seed, set = set_seed)]
     world_seed: i32,
@@ -51,10 +48,12 @@ impl SaveManagerRust {
         if OS == "windows" {
             baser = "user://";
             godot_print!("windows");
-        }
-        if OS == "android" {
+        } else if OS == "android" {
             baser = "/storage/emulated/0/Android/data/com.example.proj/files/";
             godot_print!("android");
+        } else if OS == "linux" {
+            baser = "user://";
+            godot_print!("linux");
         }
         godot_print!("{}", baser);
         (&baser).to_string()
@@ -111,7 +110,7 @@ impl SaveManagerRust {
                         .bind_mut()
                         .get_heart_ui()
                         .bind_mut()
-                        .current_health,
+                        .get_current_health(),
                 };
 
                 match bincode::serialize(&player_position) {
@@ -364,24 +363,6 @@ impl SaveManagerRust {
 
         // let save_game_json = Json::stringify_ex().done();
     }
-
-    // func save_world():
-    // var world_name = get_world_name()
-    // print(world_name)
-
-    // var SaveGameInfo := {
-    // 	"name" : world_name,
-    // 	"imgPath" : RustSaveManager1.get_os() + "games/" + world_name + "/" + world_name + ".png",
-    // 	"dateTime" : Time.get_unix_time_from_system(),
-    // 	"seed": WorldSeed
-    // }
-    // var SaveGameJson := JSON.stringify(SaveGameInfo)
-
-    // var SaveGameFile := FileAccess.open( RustSaveManager1.get_os() + "games/" + world_name + "/" + world_name + "_saveGame.json", FileAccess.WRITE)
-    // SaveGameFile.store_string(SaveGameJson)
-
-    // var screenshot := get_viewport().get_texture().get_image()
-    // screenshot.save_png(RustSaveManager1.get_os() + "games/" + world_name + "/" + world_name + ".png")
 
     #[func]
     pub fn set_player_health(&mut self, health: i32) {

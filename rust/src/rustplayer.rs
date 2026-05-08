@@ -6,6 +6,7 @@ use godot::prelude::*;
 use godot::tools::get_autoload_by_name;
 use std::str::FromStr;
 
+use crate::entity::Entity;
 use crate::heart::Heart;
 use crate::inv_slot::InvSlot;
 use crate::inventory::Inventory;
@@ -180,7 +181,19 @@ impl ICharacterBody2D for Rustplayer {
         // godot_print!("The item name in index 0 is: {}", name)
     }
 }
-
+impl Entity for Rustplayer {
+    fn take_damage(&mut self, amount: i32) {
+        self.health -= amount;
+        todo!("Implement this across the file")
+    }
+    fn heal(&mut self, amount: i32) {
+        self.health += amount;
+        todo!("Implement this across the file, refator the heal function at heart its not needed")
+    }
+    fn is_alive(&self) -> bool {
+        self.health >= 0
+    }
+}
 #[godot_api]
 impl Rustplayer {
     #[rpc(unreliable, any_peer)]

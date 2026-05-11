@@ -65,7 +65,6 @@ func add_player(pid):
 
 func _on_auto_save_timeout() -> void:
 	RustSaveManager1.auto_save()
-	pass 
 
 
 func _on_saving_time_timeout() -> void:
@@ -80,7 +79,6 @@ func _on_menu_pressed() -> void:
 	%TouchControls.visible = false
 	get_tree().paused = true
 	%Panel.visible = true
-	pass # Replace with function body.
 
 func _on_save_pressed() -> void:
 	%TouchControls.visible = false
@@ -88,13 +86,12 @@ func _on_save_pressed() -> void:
 	%CanvasLayer.visible = false
 	terrain.flush_all_queues()
 	%SavingTime.start()
-	pass # Replace with function body.
+
 
 func _on_back_pressed() -> void:
 	%TouchControls.visible = true
 	%Panel.visible = false
 	get_tree().paused = false
-	pass # Replace with function body.
 
 
 func _on_host_pressed() -> void:
@@ -102,10 +99,9 @@ func _on_host_pressed() -> void:
 	multiplayer.multiplayer_peer = peer
 	%World.broadcast()
 	$Broadcaster.start()
-	RoomInfo.name = RustSaveManager1.load_game
+	RoomInfo.name = RustSaveManager1.get_current_world_name()
 	var id = multiplayer.get_unique_id()
 	$PLAYERS.set_multiplayer_authority(id)
-	
 	
 	multiplayer.peer_connected.connect(
 	func(pid):
@@ -124,8 +120,7 @@ func _on_host_pressed() -> void:
 			get_node(str(pid)).queue_free()
 			player_node_names.erase(str(pid))
 	)
-	
-	pass # Replace with function body.
+
 var udp : PacketPeerUDP
 var listner: PacketPeerUDP
 @export var broadcastPort: int = 8912
@@ -136,7 +131,6 @@ func _on_broadcaster_timeout() -> void:
 	var packet = data.to_ascii_buffer()
 	%World.broadcaster_timeout(packet)
 	print(packet)
-	pass # Replace with function body.
 
 func cleanUp():
 	$Broadcaster.stop()

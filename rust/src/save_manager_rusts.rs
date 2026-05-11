@@ -31,6 +31,7 @@ pub struct SaveManagerRust {
     #[base]
     base: Base<Node>,
 
+    #[var(get, set)]
     current_world_name: StringName,
 
     #[export]
@@ -49,7 +50,7 @@ impl SaveManagerRust {
             baser = "user://";
             godot_print!("windows");
         } else if OS == "android" {
-            baser = "/storage/emulated/0/Android/data/com.example.proj/files/";
+            baser = "/storage/emulated/0/Android/data/com.oopgame.project/files/";
             godot_print!("android");
         } else if OS == "linux" {
             baser = "user://";
@@ -374,6 +375,11 @@ impl SaveManagerRust {
     #[func]
     fn set_current_world_name(&mut self, name: StringName) {
         self.current_world_name = name;
+    }
+
+    #[func]
+    fn get_current_world_name(&self) -> StringName {
+        self.current_world_name.clone()
     }
 
     #[func]

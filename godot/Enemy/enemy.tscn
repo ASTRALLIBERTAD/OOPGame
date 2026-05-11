@@ -1,4 +1,4 @@
-[gd_scene load_steps=17 format=3 uid="uid://di88ygwvhw40m"]
+[gd_scene format=3 uid="uid://di88ygwvhw40m"]
 
 [ext_resource type="Script" uid="uid://baolonatguoje" path="res://Enemy/enemy.gd" id="1_px1sc"]
 [ext_resource type="Texture2D" uid="uid://ikadhrdwx0jg" path="res://Assets/brackeys_platformer_assets/brackeys_platformer_assets/sprites/slime_green.png" id="2_am0pq"]
@@ -98,19 +98,19 @@ animations = [{
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_sbh3k"]
 size = Vector2(14, 13)
 
-[node name="Enemy" type="CharacterBody2D" groups=["enemy"]]
+[node name="Enemy" type="CharacterBody2D" unique_id=2031612785 groups=["enemy"]]
 script = ExtResource("1_px1sc")
 
-[node name="AnimatedSprite2D" type="AnimatedSprite2D" parent="."]
+[node name="AnimatedSprite2D" type="AnimatedSprite2D" parent="." unique_id=187753018]
 sprite_frames = SubResource("SpriteFrames_mqp78")
 frame_progress = 0.36433733
 
-[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+[node name="CollisionShape2D" type="CollisionShape2D" parent="." unique_id=626860540]
 position = Vector2(0, 5.5)
 shape = SubResource("RectangleShape2D_sbh3k")
 
-[node name="Area2D" type="Area2D" parent="."]
+[node name="Area2D" type="Area2D" parent="." unique_id=1717786776]
 
-[node name="CollisionShape2D" type="CollisionShape2D" parent="Area2D"]
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Area2D" unique_id=893505122]
 position = Vector2(0, 5.5)
 shape = SubResource("RectangleShape2D_sbh3k")

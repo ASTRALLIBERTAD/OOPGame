@@ -1,12 +1,12 @@
-[gd_scene load_steps=3 format=3 uid="uid://g0saqf1karhw"]
+[gd_scene format=3 uid="uid://g0saqf1karhw"]
 
 [ext_resource type="TileSet" uid="uid://ellpcyuae82q" path="res://Assets/Tiles/tille_set.tres" id="1_302q1"]
 [ext_resource type="Script" uid="uid://cqjxr3m7jfvti" path="res://joke/tile_map_layer.gd" id="1_bfo5f"]
 
-[node name="Node2D" type="Node2D"]
+[node name="Node2D" type="Node2D" unique_id=1514494592]
 
-[node name="Camera2D" type="Camera2D" parent="."]
+[node name="Camera2D" type="Camera2D" parent="." unique_id=431047938]
 
-[node name="TileMapLayer" type="TileMapLayer" parent="."]
+[node name="TileMapLayer" type="TileMapLayer" parent="." unique_id=1160518086]
 tile_set = ExtResource("1_302q1")
 script = ExtResource("1_bfo5f")

@@ -9,9 +9,7 @@ use crate::world::Node2dRust;
 pub struct NodeManager {
     base: Base<Node>,
     terrain: Gd<Terrain1>,
-    world: Gd<Node2dRust>
-
-    
+    world: Gd<Node2dRust>,
 }
 
 #[godot_api]
@@ -21,20 +19,12 @@ impl INode for NodeManager {
             base,
             terrain: Terrain1::new_alloc(),
             world: Node2dRust::new_alloc(),
-
         }
-    
     }
-
-    fn ready(&mut self) {
-        
-    }
-
 }
 
 #[godot_api]
 impl NodeManager {
-
     #[func]
     fn register_terrain(&mut self, terrain: Gd<Terrain1>) {
         self.terrain = terrain;
@@ -52,7 +42,4 @@ impl NodeManager {
     pub fn get_world(&mut self) -> Gd<Node2dRust> {
         self.world.clone()
     }
-
-    
-    
 }

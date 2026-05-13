@@ -1,7 +1,7 @@
 extends Node2dRust
 
 @onready var scene = get_tree()
-var peer = ENetMultiplayerPeer.new()
+var peer: ENetMultiplayerPeer
 @onready var terrain = $"../Terrain/Terrain1"
 @onready var debug_label = $TouchControl/TouchControls/Label # Optional: for displaying stats
 
@@ -95,30 +95,42 @@ func _on_back_pressed() -> void:
 
 
 func _on_host_pressed() -> void:
-	peer.create_server(5555, 3)
+	if multiplayer.has_multiplayer_peer():
+		multiplayer.multiplayer_peer = null
+	
+	for conn in multiplayer.peer_connected.get_connections():
+		multiplayer.peer_connected.disconnect(conn.callable)
+	
+	for conn in multiplayer.peer_disconnected.get_connections():
+		multiplayer.peer_disconnected.disconnect(conn.callable)
+	
+	peer = ENetMultiplayerPeer.new()
+	var err = peer.create_server(5555, 3)
+	if err != OK:
+		push_error("Failed to create server: %s" % err)
+		return
+	
 	multiplayer.multiplayer_peer = peer
 	%World.broadcast()
 	$Broadcaster.start()
+	
 	RoomInfo.name = RustSaveManager1.get_current_world_name()
+	
 	var id = multiplayer.get_unique_id()
 	$PLAYERS.set_multiplayer_authority(id)
 	
-	multiplayer.peer_connected.connect(
-	func(pid):
+	multiplayer.peer_connected.connect(func(pid):
 		print(pid)
 		var seeds = terrain.world_seed
 		$"..".rpc("seed", seeds)
-		
 		rpc("add_player", pid)
-		
 		player_node_names.append(str(pid))
+	)
 	
-		)
-	multiplayer.peer_disconnected.connect(
-		func(pid):
-			print(pid)
-			get_node(str(pid)).queue_free()
-			player_node_names.erase(str(pid))
+	multiplayer.peer_disconnected.connect(func(pid):
+		print(pid)
+		get_node(str(pid)).queue_free()
+		player_node_names.erase(str(pid))
 	)
 
 var udp : PacketPeerUDP

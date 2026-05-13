@@ -151,7 +151,7 @@ impl ITileMapLayer for Terrain1 {
     }
 
     fn enter_tree(&mut self) {
-        let callable = self.base_mut().callable("sync_seed");
+        let callable = self.to_gd().callable("sync_seed");
         let mut main = self.base_mut().get_node_as::<MainNode>("/root/main");
         main.connect("seed_requested", &callable);
     }

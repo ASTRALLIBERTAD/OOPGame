@@ -69,7 +69,7 @@ func _on_auto_save_timeout() -> void:
 
 func _on_saving_time_timeout() -> void:
 	get_tree().paused = false
-	RustSaveManager1.set_player_health(0)
+	
 	RustSaveManager1.rust_screenshot()
 	scene.change_scene_to_file("res://SaveAndLoad/LoadMenu.scn")
 	queue_redraw()
@@ -84,6 +84,7 @@ func _on_save_pressed() -> void:
 	%TouchControls.visible = false
 	%Panel.visible = false
 	%CanvasLayer.visible = false
+	$AutoSaveTimer.stop() 
 	terrain.flush_all_queues()
 	%SavingTime.start()
 

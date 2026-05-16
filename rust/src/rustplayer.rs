@@ -56,11 +56,18 @@ pub struct Rustplayer {
     #[export]
     item_right: OnEditor<Gd<InvSlot>>,
 
-    // slash_time: f64,
     can_slash: bool,
 
     #[export]
     attack_area: OnEditor<Gd<Area2D>>,
+
+    #[export]
+    #[var(get = get_hunger, set = set_hunger)]
+    hunger: i32,
+
+    hunger_drain_timer: f64,
+    regen_timer: f64,
+    starvation_timer: f64,
 }
 
 #[godot_api]
@@ -74,7 +81,7 @@ impl ICharacterBody2D for Rustplayer {
             item_slot: OnEditor::default(),
             is_open: false,
             heart_ui: OnEditor::default(),
-            health: i32::default(),
+            health: 20,
             camera: OnEditor::default(),
             target_position: Vector2::default(),
             id: i32::default(),
@@ -82,13 +89,18 @@ impl ICharacterBody2D for Rustplayer {
             last_update_time: 0.0,
 
             item_right: OnEditor::default(),
-            // slash_time: 0.2,
             can_slash: true,
             attack_area: OnEditor::default(),
+            hunger: 20,
+            hunger_drain_timer: 0.0,
+            regen_timer: 0.0,
+            starvation_timer: 0.0,
         }
     }
 
     fn ready(&mut self) {
+        self.base_mut().add_to_group("player");
+
         let pid = self.base_mut().get_multiplayer_authority();
         self.id = pid;
 
@@ -97,6 +109,7 @@ impl ICharacterBody2D for Rustplayer {
 
         if !is_authority {
             self.camera.make_current();
+            self.heart_ui.bind_mut().set_heart_display(self.health);
         }
     }
 
@@ -117,11 +130,9 @@ impl ICharacterBody2D for Rustplayer {
 
             if input.is_action_just_pressed(&StringName::from_str("left").unwrap()) {
                 self.sprite.set_flip_h(true);
-                self.heart_ui.bind_mut().set_heart_display(1);
             }
             if input.is_action_just_pressed(&StringName::from_str("right").unwrap()) {
                 self.sprite.set_flip_h(false);
-                self.heart_ui.bind_mut().set_heart_display(-10);
             }
 
             self.base_mut().set_velocity(velocity);
@@ -172,26 +183,29 @@ impl ICharacterBody2D for Rustplayer {
             }
         }
 
-        // let mut loader = load::<Inventory>("res://Collectibles/items/inventory.res");
-
-        // self.base_mut().get_node_and_resource("res://Collectibles/items/inventory.res");
-        // let name = loader.bind_mut().get_slots().get(0).unwrap().get_name();
-        // self.item_right.set_name(name.to_godot());
-
-        // godot_print!("The item name in index 0 is: {}", name)
+        if self.base_mut().is_multiplayer_authority() {
+            self.tick_hunger(delta);
+        }
     }
 }
 impl Entity for Rustplayer {
     fn take_damage(&mut self, amount: i32) {
-        self.health -= amount;
-        todo!("Implement this across the file")
+        if !self.is_alive() {
+            return;
+        }
+        self.health = (self.health - amount).max(0);
+        self.heart_ui.bind_mut().set_heart_display(self.health);
+        if !self.is_alive() {
+            godot_print!("player dead");
+            // self.base_mut().queue_free();
+        }
     }
     fn heal(&mut self, amount: i32) {
-        self.health += amount;
-        todo!("Implement this across the file, refator the heal function at heart its not needed")
+        self.health = (self.health + amount).clamp(0, 20);
+        self.heart_ui.bind_mut().set_heart_display(self.health);
     }
     fn is_alive(&self) -> bool {
-        self.health >= 0
+        self.health > 0
     }
 }
 #[godot_api]
@@ -266,21 +280,68 @@ impl Rustplayer {
         }
     }
 
+    fn tick_hunger(&mut self, delta: f64) {
+        let is_moving = self.base_mut().get_velocity().length() > 1.0;
+        let drain_rate = if is_moving { 6.0 } else { 12.0 };
+
+        self.hunger_drain_timer += delta;
+        if self.hunger_drain_timer >= drain_rate {
+            self.hunger_drain_timer = 0.0;
+            if self.hunger > 0 {
+                self.hunger -= 1;
+                godot_print!("Hunger: {}", self.hunger);
+            }
+        }
+
+        if self.hunger >= 18 && self.health < 20 {
+            self.regen_timer += delta;
+            if self.regen_timer >= 4.0 {
+                self.regen_timer = 0.0;
+                self.heal(1);
+                godot_print!("Regenerated 1 HP, health: {}", self.health);
+            }
+        } else {
+            self.regen_timer = 0.0;
+        }
+
+        if self.hunger == 0 && self.health > 1 {
+            self.starvation_timer += delta;
+            if self.starvation_timer >= 4.0 {
+                self.starvation_timer = 0.0;
+                self.take_damage(1);
+                godot_print!("Starving! Health: {}", self.health);
+            }
+        } else {
+            self.starvation_timer = 0.0;
+        }
+    }
+
     #[func]
     pub fn set_health(&mut self, health: i32) {
-        self.heart_ui.bind_mut().set_heart_display(health);
-        self.health = health;
+        self.health = health.clamp(0, 20);
+        self.heart_ui.bind_mut().set_heart_display(self.health);
     }
 
     #[func]
     pub fn get_health(&self) -> i32 {
         self.health
     }
-    //
-    // pub fn player_hp(&mut self, num: i32) {
-    //     self.heart_ui.bind_mut().heal(num);
-    //     self.health = num;
-    // }
+
+    #[func]
+    pub fn get_hunger(&self) -> i32 {
+        self.hunger
+    }
+
+    #[func]
+    pub fn set_hunger(&mut self, hunger: i32) {
+        self.hunger = hunger.clamp(0, 20);
+    }
+
+    #[func]
+    pub fn feed(&mut self, amount: i32) {
+        self.hunger = (self.hunger + amount).clamp(0, 20);
+        godot_print!("Fed player, hunger: {}", self.hunger);
+    }
 
     fn attack(&mut self) {
         self.attack_area.set_monitoring(true);

@@ -1,7 +1,8 @@
-mod entity;
+pub mod enemy;
+pub mod entity;
 mod example;
-mod heart;
-mod heart_display;
+pub mod heart;
+pub mod heart_display;
 mod inv_slot;
 mod inventory;
 mod item_collectibles;
@@ -14,11 +15,9 @@ mod rustplayer;
 mod save_manager_rusts;
 mod terrain;
 mod world;
-
 use godot::prelude::*;
 
 pub struct RustExtension;
 
 #[gdextension]
 unsafe impl ExtensionLibrary for RustExtension {}
-

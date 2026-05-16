@@ -112,7 +112,7 @@ impl ICharacterBody2D for Troll {
         self.aura_timer += delta;
         if self.aura_timer >= self.aura_tick_rate {
             self.aura_timer = 0.0;
-            self.emit_confused_to_nearby_players();
+            self.apply_confused_to_nearby_players();
         }
 
         if distance <= 35.0 && self.can_slash {
@@ -131,7 +131,6 @@ impl Entity for Troll {
         self.health = (self.health - amount).max(0);
         if !self.is_alive() {
             self.mob_state = MobState::Dead;
-            self.base_mut().emit_signal("troll_silenced", &[]);
             self.base_mut().queue_free();
         }
     }
@@ -170,19 +169,16 @@ impl HostileBehavior for Troll {
 
 #[godot_api]
 impl Troll {
-    #[signal]
-    fn confused_applied(duration: f64);
-
-    #[signal]
-    fn troll_silenced();
-
-    fn emit_confused_to_nearby_players(&mut self) {
+    fn apply_confused_to_nearby_players(&mut self) {
         let duration = self.confused_duration;
         for body in self.disinfo_aura.get_overlapping_bodies().iter_shared() {
             if body.is_in_group("player") {
-                self.base_mut()
-                    .emit_signal("confused_applied", &[Variant::from(duration)]);
-                godot_print!("Troll applies Confused debuff for {}s!", duration);
+                if let Ok(mut player) = body.try_cast::<Rustplayer>() {
+                    if !player.bind().is_confused() {
+                        player.bind_mut().apply_confused(duration);
+                        godot_print!("Troll applies Confused debuff for {}s!", duration);
+                    }
+                }
                 break;
             }
         }

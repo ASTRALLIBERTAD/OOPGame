@@ -62,6 +62,12 @@ pub struct Crocodile {
     reinforcements_spawned: bool,
 
     regen_timer: f64,
+
+    #[export]
+    troll_scene: OnEditor<Gd<PackedScene>>,
+
+    #[export]
+    enforcer_scene: OnEditor<Gd<PackedScene>>,
 }
 
 #[godot_api]
@@ -86,6 +92,8 @@ impl ICharacterBody2D for Crocodile {
             bribe_timer: 0.0,
             reinforcements_spawned: false,
             regen_timer: 0.0,
+            troll_scene: OnEditor::default(),
+            enforcer_scene: OnEditor::default(),
         }
     }
 
@@ -129,7 +137,6 @@ impl ICharacterBody2D for Crocodile {
 
         if self.phase == BuwayaPhase::Phase1 && !self.bribe_resolved {
             self.tick_bribe(delta);
-            return;
         }
 
         if self.phase == BuwayaPhase::Phase2 && !self.reinforcements_spawned {
@@ -153,6 +160,7 @@ impl ICharacterBody2D for Crocodile {
 impl Entity for Crocodile {
     fn take_damage(&mut self, amount: i32) {
         self.health = (self.health - amount).max(0);
+        godot_print!("Buhaya Health: {}", self.health);
         if !self.is_alive() {
             self.mob_state = MobState::Dead;
             self.on_death();
@@ -201,9 +209,6 @@ impl HostileBehavior for Crocodile {
 impl Crocodile {
     #[signal]
     fn bribe_offered(piso: i32);
-
-    #[signal]
-    fn call_reinforcements();
 
     #[signal]
     fn boss_defeated();
@@ -276,8 +281,30 @@ impl Crocodile {
 
     fn call_reinforcements(&mut self) {
         self.reinforcements_spawned = true;
-        self.base_mut().emit_signal("call_reinforcements", &[]);
         godot_print!("Buwaya calls his troll army and enforcers!");
+
+        let my_pos = self.base_mut().get_global_position();
+        let mut parent = self.base_mut().get_parent().unwrap();
+
+        let troll_offsets = [
+            Vector2::new(-120.0, 0.0),
+            Vector2::new(120.0, 0.0),
+            Vector2::new(0.0, -120.0),
+        ];
+
+        for offset in troll_offsets {
+            let mut instance = self.troll_scene.instantiate().unwrap().cast::<Node2D>();
+            instance.set_global_position(my_pos + offset);
+            parent.add_child(&instance);
+        }
+
+        let enforcer_offsets = [Vector2::new(-180.0, 80.0), Vector2::new(180.0, 80.0)];
+
+        for offset in enforcer_offsets {
+            let mut instance = self.enforcer_scene.instantiate().unwrap().cast::<Node2D>();
+            instance.set_global_position(my_pos + offset);
+            parent.add_child(&instance);
+        }
     }
 
     fn on_death(&mut self) {

@@ -77,6 +77,9 @@ pub struct Rustplayer {
 
     indebted: bool,
     indebted_timer: f64,
+
+    confused: bool,
+    confused_timer: f64,
 }
 
 #[godot_api]
@@ -106,6 +109,9 @@ impl ICharacterBody2D for Rustplayer {
             starvation_timer: 0.0,
             indebted: false,
             indebted_timer: 0.0,
+
+            confused: false,
+            confused_timer: 0.0,
         }
     }
 
@@ -137,7 +143,11 @@ impl ICharacterBody2D for Rustplayer {
                 &StringName::from_str("down").unwrap(),
             );
 
-            let velocity = direction * speed;
+            let velocity = if self.confused {
+                direction * speed * -1.0
+            } else {
+                direction * speed
+            };
 
             if input.is_action_just_pressed(&StringName::from_str("left").unwrap()) {
                 self.sprite.set_flip_h(true);
@@ -195,6 +205,7 @@ impl ICharacterBody2D for Rustplayer {
         if self.base_mut().is_multiplayer_authority() {
             self.tick_hunger(delta);
             self.tick_indebted(delta);
+            self.tick_confused(delta);
         }
     }
 }
@@ -326,6 +337,30 @@ impl Rustplayer {
         }
     }
 
+    fn tick_confused(&mut self, delta: f64) {
+        if !self.confused {
+            return;
+        }
+        self.confused_timer += delta;
+        if self.confused_timer >= 0.0 {
+            self.confused = false;
+            self.confused_timer = 0.0;
+            godot_print!("Confused wore off.");
+        }
+    }
+
+    #[func]
+    pub fn apply_confused(&mut self, duration: f64) {
+        self.confused = true;
+        self.confused_timer = -duration;
+        godot_print!("Confused applied for {}s!", duration);
+    }
+
+    #[func]
+    pub fn is_confused(&self) -> bool {
+        self.confused
+    }
+
     fn tick_indebted(&mut self, delta: f64) {
         if !self.indebted {
             return;
@@ -355,19 +390,29 @@ impl Rustplayer {
         let base = self.base().clone();
 
         godot::task::spawn(async move {
-            let timer = base.get_tree().create_timer(0.5);
+            let timer = base.get_tree().create_timer(0.1);
             Signal::from_object_signal(&timer, "timeout")
                 .to_future::<()>()
                 .await;
 
+            godot_print!(
+                "attack overlapping count: {}",
+                attack_area.get_overlapping_bodies().len()
+            );
+
             for body in attack_area.get_overlapping_bodies().iter_shared() {
-                if body.is_in_group("enemy") {
-                    if let Ok(mut crocodile) =
-                        body.try_cast::<crate::mobs::hostile::crocodile::Crocodile>()
-                    {
-                        crocodile.bind_mut().take_damage(damage);
-                        godot_print!("Hit Buwaya for {} damage!", damage);
-                    }
+                if let Ok(mut crocodile) = body
+                    .clone()
+                    .try_cast::<crate::mobs::hostile::crocodile::Crocodile>()
+                {
+                    crocodile.bind_mut().take_damage(damage);
+                    godot_print!("Hit Buwaya for {} damage!", damage);
+                } else if let Ok(mut troll) = body
+                    .clone()
+                    .try_cast::<crate::mobs::hostile::troll::Troll>()
+                {
+                    troll.bind_mut().take_damage(damage);
+                    godot_print!("Hit Troll for {} damage!", damage);
                 }
             }
 

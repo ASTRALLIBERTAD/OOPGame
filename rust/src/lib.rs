@@ -1,4 +1,3 @@
-pub mod enemy;
 pub mod entity;
 mod example;
 pub mod heart;
@@ -8,6 +7,7 @@ mod inventory;
 mod item_collectibles;
 mod item_slot;
 mod main_node;
+pub mod mobs;
 mod multiplayer_scene;
 mod node_manager;
 mod pet;

@@ -3,7 +3,7 @@ extends Node2dRust
 @onready var scene = get_tree()
 var peer: ENetMultiplayerPeer
 @onready var terrain = $"../Terrain/Terrain1"
-@onready var debug_label = $TouchControl/TouchControls/Label # Optional: for displaying stats
+@onready var debug_label = $PauseMenu/CanvasLayer/Label # Optional: for displaying stats
 
 var update_interval = 0.5
 var time_passed = 0.0
@@ -76,12 +76,18 @@ func _on_saving_time_timeout() -> void:
 	queue_free()
 
 func _on_menu_pressed() -> void:
-	%TouchControls.visible = false
+	var player_menus = %PLAYERS.get_node("Control/CanvasLayer") as CanvasLayer 
+	player_menus.visible = false
+	var player_control = %PLAYERS.get_node("Control/TouchControls") as CanvasLayer
+	player_control.visible = false
 	get_tree().paused = true
 	%Panel.visible = true
 
 func _on_save_pressed() -> void:
-	%TouchControls.visible = false
+	var player_menus = %PLAYERS.get_node("Control/CanvasLayer") as CanvasLayer 
+	player_menus.visible = false
+	var player_control = %PLAYERS.get_node("Control/TouchControls") as CanvasLayer 
+	player_control.visible = false
 	%Panel.visible = false
 	%CanvasLayer.visible = false
 	$AutoSaveTimer.stop() 

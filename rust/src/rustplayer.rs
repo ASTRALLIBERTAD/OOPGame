@@ -80,6 +80,9 @@ pub struct Rustplayer {
 
     confused: bool,
     confused_timer: f64,
+
+    arrested: bool,
+    arrested_timer: f64,
 }
 
 #[godot_api]
@@ -112,6 +115,9 @@ impl ICharacterBody2D for Rustplayer {
 
             confused: false,
             confused_timer: 0.0,
+
+            arrested: false,
+            arrested_timer: 0.0,
         }
     }
 
@@ -159,8 +165,13 @@ impl ICharacterBody2D for Rustplayer {
                 self.sprite.set_flip_h(false);
             }
 
-            self.base_mut().set_velocity(velocity);
-            self.base_mut().move_and_slide();
+            if self.arrested {
+                self.base_mut().set_velocity(Vector2::ZERO);
+                self.base_mut().move_and_slide();
+            } else {
+                self.base_mut().set_velocity(velocity);
+                self.base_mut().move_and_slide();
+            }
 
             self.update_terrain_if_needed(delta);
 
@@ -209,6 +220,7 @@ impl ICharacterBody2D for Rustplayer {
             self.tick_hunger(delta);
             self.tick_indebted(delta);
             self.tick_confused(delta);
+            self.tick_arrested(delta);
         }
     }
 }
@@ -364,6 +376,30 @@ impl Rustplayer {
         self.confused
     }
 
+    fn tick_arrested(&mut self, delta: f64) {
+        if !self.arrested {
+            return;
+        }
+        self.arrested_timer += delta;
+        if self.arrested_timer >= 0.0 {
+            self.arrested = false;
+            self.arrested_timer = 0.0;
+            godot_print!("Arrest released.");
+        }
+    }
+
+    #[func]
+    pub fn apply_arrested(&mut self, duration: f64) {
+        self.arrested = true;
+        self.arrested_timer = -duration;
+        godot_print!("Player arrested for {}s!", duration);
+    }
+
+    #[func]
+    pub fn is_arrested(&self) -> bool {
+        self.arrested
+    }
+
     fn tick_indebted(&mut self, delta: f64) {
         if !self.indebted {
             return;
@@ -388,23 +424,21 @@ impl Rustplayer {
         let damage = self.effective_attack_damage();
         let attack_area = self.attack_area.clone();
 
-        godot_print!(
-            "attack overlapping count: {}",
-            attack_area.get_overlapping_bodies().len()
-        );
         for body in attack_area.get_overlapping_bodies().iter_shared() {
-            godot_print!("body class: {}", body.get_class());
             if let Ok(mut crocodile) = body
                 .clone()
                 .try_cast::<crate::mobs::hostile::crocodile::Crocodile>()
             {
                 crocodile.bind_mut().take_damage(damage);
-                godot_print!("Hit Buwaya for {} damage!", damage);
-            } else if let Ok(mut troll) = body.try_cast::<crate::mobs::hostile::troll::Troll>() {
+            } else if let Ok(mut troll) = body
+                .clone()
+                .try_cast::<crate::mobs::hostile::troll::Troll>()
+            {
                 troll.bind_mut().take_damage(damage);
-                godot_print!("Hit Troll for {} damage!", damage);
-            } else {
-                godot_print!("body not matched for damage");
+            } else if let Ok(mut order_force) =
+                body.try_cast::<crate::mobs::hostile::order_force::OrderForce>()
+            {
+                order_force.bind_mut().take_damage(damage);
             }
         }
     }

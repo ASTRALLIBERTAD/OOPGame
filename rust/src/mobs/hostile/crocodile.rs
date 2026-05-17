@@ -3,7 +3,9 @@ use godot::obj::WithBaseField;
 use godot::prelude::*;
 
 use crate::entity::{Entity, HostileBehavior, MobState};
+use crate::node_manager::NodeManager;
 use crate::rustplayer::Rustplayer;
+use godot::tools::get_autoload_by_name;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BuwayaPhase {
@@ -160,7 +162,6 @@ impl ICharacterBody2D for Crocodile {
 impl Entity for Crocodile {
     fn take_damage(&mut self, amount: i32) {
         self.health = (self.health - amount).max(0);
-        godot_print!("Buhaya Health: {}", self.health);
         if !self.is_alive() {
             self.mob_state = MobState::Dead;
             self.on_death();
@@ -235,6 +236,7 @@ impl Crocodile {
                     godot_print!("Buwaya reveals his true form!");
                     self.speed *= 1.3;
                     self.attack_damage += 5;
+                    self.spawn_corruption_tiles();
                 }
                 _ => {}
             }
@@ -251,21 +253,32 @@ impl Crocodile {
         }
     }
 
+    fn get_corruption_count_from_terrain(&mut self) -> i32 {
+        let mut scene = get_autoload_by_name::<NodeManager>("GlobalNodeManager");
+        let terrain = scene.bind_mut().get_terrain();
+        terrain.clone().bind_mut().get_corruption_tile_count()
+    }
+
     fn tick_phase3_regen(&mut self, delta: f64) {
-        if self.phase != BuwayaPhase::Phase3 || self.corruption_tiles <= 0 {
+        if self.phase != BuwayaPhase::Phase3 {
             self.regen_timer = 0.0;
             return;
         }
+
+        let count = self.get_corruption_count_from_terrain();
+        self.corruption_tiles = count;
+
+        if count <= 0 {
+            self.regen_timer = 0.0;
+            return;
+        }
+
         self.regen_timer += delta;
         if self.regen_timer >= 2.0 {
             self.regen_timer = 0.0;
-            let regen = (self.corruption_tiles * 2).min(10);
+            let regen = (count * 2).min(10);
             self.heal(regen);
-            godot_print!(
-                "Buwaya regens {} HP from {} corruption tiles",
-                regen,
-                self.corruption_tiles
-            );
+            godot_print!("Buwaya regens {} HP from {} corruption tiles", regen, count);
         }
     }
 
@@ -332,6 +345,45 @@ impl Crocodile {
             ],
         );
         self.base_mut().emit_signal("boss_defeated", &[]);
+    }
+
+    fn spawn_corruption_tiles(&mut self) {
+        let my_pos = self.base_mut().get_global_position();
+        let mut scene = get_autoload_by_name::<NodeManager>("GlobalNodeManager");
+        let mut terrain: Gd<crate::terrain::Terrain1> = scene.bind_mut().get_terrain();
+
+        let boss_tile = terrain.bind_mut().base().local_to_map(my_pos);
+
+        let mut candidates: Vec<Vector2i> = Vec::new();
+        for dx in -4..=4_i32 {
+            for dy in -4..=4_i32 {
+                candidates.push(Vector2i::new(boss_tile.x + dx, boss_tile.y + dy));
+            }
+        }
+
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        let mut hasher = DefaultHasher::new();
+        (boss_tile.x as u64 ^ boss_tile.y as u64).hash(&mut hasher);
+        let mut seed = hasher.finish();
+
+        let mut tile_positions: Vec<Vector2i> = Vec::new();
+        tile_positions.push(boss_tile);
+
+        let mut remaining = candidates;
+        while tile_positions.len() < 8 && !remaining.is_empty() {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            let idx = (seed as usize) % remaining.len();
+            tile_positions.push(remaining.remove(idx));
+        }
+
+        for tile_pos in tile_positions {
+            terrain.bind_mut().spawn_corruption_tile(tile_pos);
+        }
+
+        godot_print!("Buwaya corrupts the land!");
     }
 
     fn get_player(&mut self) -> Option<Gd<Rustplayer>> {

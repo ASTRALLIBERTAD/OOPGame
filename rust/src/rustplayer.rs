@@ -128,6 +128,9 @@ impl ICharacterBody2D for Rustplayer {
             self.camera.make_current();
             self.heart_ui.bind_mut().set_heart_display(self.health);
         }
+
+        self.attack_area.set_monitoring(true);
+        self.attack_area.set_monitorable(false);
     }
 
     fn process(&mut self, delta: f64) {
@@ -382,43 +385,28 @@ impl Rustplayer {
     }
 
     fn attack(&mut self) {
-        self.attack_area.set_monitoring(true);
-        self.attack_area.set_monitorable(true);
-
         let damage = self.effective_attack_damage();
-        let mut attack_area = self.attack_area.clone();
-        let base = self.base().clone();
+        let attack_area = self.attack_area.clone();
 
-        godot::task::spawn(async move {
-            let timer = base.get_tree().create_timer(0.1);
-            Signal::from_object_signal(&timer, "timeout")
-                .to_future::<()>()
-                .await;
-
-            godot_print!(
-                "attack overlapping count: {}",
-                attack_area.get_overlapping_bodies().len()
-            );
-
-            for body in attack_area.get_overlapping_bodies().iter_shared() {
-                if let Ok(mut crocodile) = body
-                    .clone()
-                    .try_cast::<crate::mobs::hostile::crocodile::Crocodile>()
-                {
-                    crocodile.bind_mut().take_damage(damage);
-                    godot_print!("Hit Buwaya for {} damage!", damage);
-                } else if let Ok(mut troll) = body
-                    .clone()
-                    .try_cast::<crate::mobs::hostile::troll::Troll>()
-                {
-                    troll.bind_mut().take_damage(damage);
-                    godot_print!("Hit Troll for {} damage!", damage);
-                }
+        godot_print!(
+            "attack overlapping count: {}",
+            attack_area.get_overlapping_bodies().len()
+        );
+        for body in attack_area.get_overlapping_bodies().iter_shared() {
+            godot_print!("body class: {}", body.get_class());
+            if let Ok(mut crocodile) = body
+                .clone()
+                .try_cast::<crate::mobs::hostile::crocodile::Crocodile>()
+            {
+                crocodile.bind_mut().take_damage(damage);
+                godot_print!("Hit Buwaya for {} damage!", damage);
+            } else if let Ok(mut troll) = body.try_cast::<crate::mobs::hostile::troll::Troll>() {
+                troll.bind_mut().take_damage(damage);
+                godot_print!("Hit Troll for {} damage!", damage);
+            } else {
+                godot_print!("body not matched for damage");
             }
-
-            attack_area.set_monitoring(false);
-            attack_area.set_monitorable(false);
-        });
+        }
     }
 
     #[func]

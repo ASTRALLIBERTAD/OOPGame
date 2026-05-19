@@ -21,5 +21,4 @@ func _on_area_2d_body_entered(body: Node2D) -> void:
 func self_destroy():
 	self.queue_free()
 
-func player_collect():
-	player.collect_items(item, -1)
+func player_collect():	player.collect_items(item, -1)

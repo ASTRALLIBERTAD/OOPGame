@@ -53,3 +53,5 @@
 *.dll      binary
 *.so       binary
 *.dylib    binary
+
+*.import merge=ours

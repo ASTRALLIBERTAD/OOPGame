@@ -48,7 +48,7 @@ func LoadImageTexture(path : String):
 
 
 func _on_timer_timeout() -> void:
-	var world_scene: = preload("res://World.scn").instantiate()
+	var world_scene: = preload("res://world/World.scn").instantiate()
 	var u: Terrain1 = world_scene.get_node("Terrain/Terrain1") as Terrain1
 	u.world_seed = GameTerrain
 	

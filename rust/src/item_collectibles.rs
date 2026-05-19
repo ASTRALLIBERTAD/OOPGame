@@ -28,7 +28,7 @@ impl IResource for Collectibles {
         Self {
             base,
             name: GString::default(),
-            amount: i32::default(),
+            amount: 1,
             icon: None,
             stackable: bool::default(),
         }
@@ -56,4 +56,3 @@ impl Collectibles {
         self.stackable
     }
 }
-

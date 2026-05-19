@@ -31,15 +31,16 @@ impl Inventory {
     #[func]
     pub fn insert(&mut self, item: Gd<Collectibles>, index1: i32, index2: i32) {
         if index1 < 0 {
-            // Try to stack first
+            let item_name = item.bind().get_name();
+            let item_stackable = item.bind().is_stackable();
+
             // stacking loop
             for mut slot in self.slots.iter_shared() {
                 let slot_ref = slot.bind_mut();
                 let mut existing = slot_ref.get_item();
                 let mut existing_ref = existing.bind_mut();
 
-                if existing_ref.is_stackable() && existing_ref.get_name() == item.bind().get_name()
-                {
+                if item_stackable && existing_ref.get_name() == item_name {
                     let amount = existing_ref.get_amount();
                     existing_ref.set_amount(amount + 1);
                     drop(existing_ref);
@@ -52,7 +53,9 @@ impl Inventory {
             // empty slot loop
             for mut slot in self.slots.iter_shared() {
                 let mut slot_ref = slot.bind_mut();
-                if slot_ref.get_item().bind().get_name().is_empty() {
+                let existing = slot_ref.get_item();
+                if existing.bind().get_name().is_empty() {
+                    drop(existing);
                     slot_ref.set_item(item.clone());
                     drop(slot_ref);
                     self.signals().update().emit();

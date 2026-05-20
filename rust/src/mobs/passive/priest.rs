@@ -166,10 +166,7 @@ impl Priest {
 
     #[func]
     pub fn on_interact(&mut self) {
-        let tree = match self.base_mut().get_tree() {
-            Some(t) => t,
-            None => return,
-        };
+        let tree = self.base_mut().get_tree();
         let players = tree.get_nodes_in_group("player");
 
         for node in players.iter_shared() {
@@ -221,10 +218,7 @@ impl Priest {
         self.sanctuary_timer = 0.0;
 
         let my_pos = self.base_mut().get_global_position();
-        let tree = match self.base_mut().get_tree() {
-            Some(t) => t,
-            None => return,
-        };
+        let tree = self.base_mut().get_tree();
         let players = tree.get_nodes_in_group("player");
 
         for node in players.iter_shared() {
@@ -247,10 +241,7 @@ impl Priest {
         }
 
         let my_pos = self.base_mut().get_global_position();
-        let tree = match self.base_mut().get_tree() {
-            Some(t) => t,
-            None => return,
-        };
+        let tree = self.base_mut().get_tree();
         let players = tree.get_nodes_in_group("player");
 
         for node in players.iter_shared() {

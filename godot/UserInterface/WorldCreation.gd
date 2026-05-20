@@ -57,12 +57,8 @@ func _on_timer_timeout() -> void:
 func _on_backbutton_pressed() -> void:
 	get_tree().change_scene_to_file("res://SaveAndLoad/LoadMenu.scn")
 
-
-
 func _on_back_pressed() -> void:
 	get_tree().change_scene_to_file("res://SaveAndLoad/LoadMenu.scn")
-
-
 
 func _on_playbuton_pressed() -> void:
 	$Timer.start()

@@ -96,7 +96,10 @@ func _on_save_pressed() -> void:
 
 
 func _on_back_pressed() -> void:
-	%TouchControls.visible = true
+	var player_menus = %PLAYERS.get_node("Control/CanvasLayer") as CanvasLayer 
+	player_menus.visible = true
+	var player_control = %PLAYERS.get_node("Control/TouchControls") as CanvasLayer 
+	player_control.visible = true
 	%Panel.visible = false
 	get_tree().paused = false
 

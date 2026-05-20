@@ -16,7 +16,7 @@ struct PlayerData {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct SaveGameInfo {
+struct SaveGameInfo {
     #[serde(rename = "dateTime")]
     date_time: f64,
     #[serde(rename = "imgPath")]
@@ -25,9 +25,16 @@ pub struct SaveGameInfo {
     seed: i32,
 }
 
+#[derive(Serialize, Deserialize, Clone)]
+struct ConfigSettings {
+    #[serde(rename = "playerName")]
+     player_name: String,
+     volume: f32,
+}
+
 #[derive(GodotClass)]
 #[class(base = Node, init)]
-pub struct SaveManagerRust {
+struct SaveManagerRust {
     #[base]
     base: Base<Node>,
 
@@ -44,7 +51,7 @@ pub struct SaveManagerRust {
 #[godot_api]
 impl SaveManagerRust {
     #[func]
-    pub fn get_os(&self) -> String {
+     fn get_os(&self) -> String {
         let mut baser: &str = "";
         if OS == "windows" {
             baser = "user://";
@@ -61,7 +68,7 @@ impl SaveManagerRust {
     }
 
     #[func]
-    pub fn save_game_rust(&mut self, name: String) {
+     fn save_game_rust(&mut self, name: String) {
         // self.load_game = name.clone().to_godot();
         self.current_world_name = StringName::from(&name);
 
@@ -366,7 +373,7 @@ impl SaveManagerRust {
     }
 
     #[func]
-    pub fn set_player_health(&mut self, health: i32) {
+     fn set_player_health(&mut self, health: i32) {
         if let Some(mut player) = self.get_player() {
             player.bind_mut().set_health(health);
         }
@@ -393,4 +400,63 @@ impl SaveManagerRust {
     fn get_seed(&self) -> i32 {
         self.world_seed
     }
+
+    #[func]
+     fn save_config_json(&self, player_name: String, volume: f32) {
+        let base_path = self.get_os();
+        let config_path = format!("{}/config.json", base_path);
+
+        let settings = ConfigSettings {
+            player_name,
+            volume,
+        };
+
+        // Leverage Godot's FileAccess wrapper via your defined ModeFlags
+        match FileAccess::open(&config_path, ModeFlags::WRITE) {
+            Some(mut file) => {
+                match serde_json::to_string(&settings) {
+                    Ok(json_string) => {
+                        file.store_string(&json_string);
+                        godot_print!("Config settings saved successfully at {}", config_path);
+                    }
+                    Err(e) => {
+                        godot_error!("Failed to serialize config json: {}", e);
+                    }
+                }
+            }
+            None => {
+                godot_error!("Failed to create config file at {}", config_path);
+            }
+        }
+    }
+
+    #[func]
+     fn load_config_json(&self) -> Dictionary<GString, Variant> {
+        let base_path = self.get_os();
+        let config_path = format!("{}/config.json", base_path);
+        let mut dict = Dictionary::new();
+
+        // Check if config exists before reading
+        if !FileAccess::file_exists(&config_path) {
+            godot_print!("No global config.json found at path. Returning empty dictionary.");
+            return dict;
+        }
+
+        if let Some(mut file) = FileAccess::open(&config_path, ModeFlags::READ) {
+            let json_string = file.get_as_text().to_string();
+            
+            match serde_json::from_str::<ConfigSettings>(&json_string) {
+                Ok(settings) => {
+                    dict.insert("player_name", settings.player_name);
+                    dict.insert("volume", settings.volume);
+                    godot_print!("Config loaded successfully from Rust backend.");
+                }
+                Err(e) => {
+                    godot_error!("Failed to parse config string contents: {}", e);
+                }
+            }
+        }
+        dict
+    }
+
 }

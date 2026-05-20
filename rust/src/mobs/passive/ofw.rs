@@ -199,10 +199,7 @@ impl Ofw {
 
         self.box_opened = true;
 
-        let tree = match self.base_mut().get_tree() {
-            Some(t) => t,
-            None => return,
-        };
+        let tree = self.base_mut().get_tree();
         let players = tree.get_nodes_in_group("player");
 
         for node in players.iter_shared() {

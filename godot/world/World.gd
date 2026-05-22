@@ -96,7 +96,7 @@ func _on_save_pressed() -> void:
 
 
 func _on_back_pressed() -> void:
-	%TouchControls.visible = true
+	#%TouchControls.visible = true
 	%Panel.visible = false
 	get_tree().paused = false
 

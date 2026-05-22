@@ -6,13 +6,10 @@ reloadable = true
 [libraries]
 windows.debug.x86_64 =   "res://../rust/target/release/rust.dll"
 windows.release.x86_64 = "res://../rust/target/release/rust.dll"
-windows.editor.x86_64 = "res://../rust/target/release/rust.dll"
 
 linux.debug.x86_64 = "res://../rust/target/release/librust.so"
 linux.release.x86_64 = "res://..rust/target/release/librust.so"
-linux.editor.x86_64 = "res://..rust/target/release/librust.so"
 
 android.debug.arm64 = "res://lib/arm64-v8a/librust.so"
 android.release.arm64 = "res://lib/arm64-v8a/librust.so"
-android.editor.arm64 = "res://lib/arm64-v8a/librust.so"
 

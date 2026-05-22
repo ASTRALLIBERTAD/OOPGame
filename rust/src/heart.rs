@@ -52,19 +52,14 @@ impl IHBoxContainer for Heart {
 
 #[godot_api]
 impl Heart {
-    pub fn set_heart_display(&mut self, change: i32) {
-        godot_print!("updating health");
-
+    pub fn set_heart_display(&mut self, health: i32) {
         let full_heart: &Gd<Texture2D> = self.full_heart.to_godot();
         let half_heart: &Gd<Texture2D> = self.half_heart.to_godot();
         let empty_heart: &Gd<Texture2D> = self.empty_heart.to_godot();
 
-        //   Apply half-heart system (1 = half heart)
-        self.current_health = (self.current_health + change).clamp(0, 20);
-
+        self.current_health = health.clamp(0, 20);
         godot_print!("current health (HP): {:?}", self.current_health);
 
-        //  Convert HP → heart visuals
         let mut remaining_hp = self.current_health;
 
         for heart in &mut self.heart_list {

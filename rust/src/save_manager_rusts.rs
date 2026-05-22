@@ -102,16 +102,15 @@ impl SaveManagerRust {
 
         match FileAccess::open(&save_path, ModeFlags::WRITE) {
             Some(mut file) => {
-                let position = self.get_player().get_global_position();
+                let Some(mut player) = self.get_player() else {
+                    godot_error!("No player found, skipping save");
+                    return;
+                };
+                let position = player.get_global_position();
                 let player_position = PlayerData {
                     position_x: position.x,
                     position_y: position.y,
-                    health: self
-                        .get_player()
-                        .bind_mut()
-                        .get_heart_ui()
-                        .bind_mut()
-                        .get_current_health(),
+                    health: player.bind_mut().get_health(),
                 };
 
                 match bincode::serialize(&player_position) {
@@ -190,13 +189,15 @@ impl SaveManagerRust {
             // Deserialize the player position data
             match bincode::deserialize::<PlayerData>(data_slice) {
                 Ok(player_data) => {
-                    self.get_player().set_global_position(Vector2::new(
+                    let Some(mut player) = self.get_player() else {
+                        godot_error!("No player found, skipping load");
+                        return;
+                    };
+                    player.set_global_position(Vector2::new(
                         player_data.position_x,
                         player_data.position_y,
                     ));
-                    self.get_player().bind_mut().
-                    // health = player_data.health;
-                    set_health(player_data.health);
+                    player.bind_mut().set_health(player_data.health);
                     godot_print!("Player position loaded successfully from {}", save_path);
                     godot_print!("saved heart {}", player_data.health);
                 }
@@ -209,13 +210,12 @@ impl SaveManagerRust {
         }
     }
 
-    fn get_player(&mut self) -> Gd<Rustplayer> {
-        return self
-            .base_mut()
+    fn get_player(&mut self) -> Option<Gd<Rustplayer>> {
+        self.base_mut()
             .get_tree()
-            .get_root()
-            .unwrap()
-            .get_node_as::<Rustplayer>("/root/main/World/PLAYERS");
+            .get_nodes_in_group("player")
+            .iter_shared()
+            .find_map(|node| node.try_cast::<Rustplayer>().ok())
     }
 
     #[func]
@@ -367,7 +367,9 @@ impl SaveManagerRust {
 
     #[func]
     pub fn set_player_health(&mut self, health: i32) {
-        self.get_player().bind_mut().set_health(health);
+        if let Some(mut player) = self.get_player() {
+            player.bind_mut().set_health(health);
+        }
         self.player_health = health;
         godot_print!("Player health set to: {}", health);
     }

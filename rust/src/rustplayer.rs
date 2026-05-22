@@ -13,6 +13,12 @@ use crate::inventory::Inventory;
 use crate::item_collectibles::Collectibles;
 use crate::node_manager::NodeManager;
 
+const MAX_HEALTH: i32 = 20;
+const ATTACK_DAMAGE: i32 = 10;
+const ATTACK_COOLDOWN: f64 = 0.6;
+const INDEBTED_ATTACK_REDUCTION: i32 = 3;
+const INDEBTED_DURATION: f64 = 60.0;
+
 #[derive(GodotClass)]
 #[class(base=CharacterBody2D)]
 pub struct Rustplayer {
@@ -49,18 +55,34 @@ pub struct Rustplayer {
     #[export]
     pub id: i32,
 
-    // Optimization: Track last chunk position
     last_chunk_pos: Vector2i,
     last_update_time: f64,
 
     #[export]
     item_right: OnEditor<Gd<InvSlot>>,
 
-    // slash_time: f64,
     can_slash: bool,
+    slash_timer: f64,
 
     #[export]
     attack_area: OnEditor<Gd<Area2D>>,
+
+    #[export]
+    #[var(get = get_hunger, set = set_hunger)]
+    hunger: i32,
+
+    hunger_drain_timer: f64,
+    regen_timer: f64,
+    starvation_timer: f64,
+
+    indebted: bool,
+    indebted_timer: f64,
+
+    confused: bool,
+    confused_timer: f64,
+
+    arrested: bool,
+    arrested_timer: f64,
 }
 
 #[godot_api]
@@ -74,21 +96,34 @@ impl ICharacterBody2D for Rustplayer {
             item_slot: OnEditor::default(),
             is_open: false,
             heart_ui: OnEditor::default(),
-            health: i32::default(),
+            health: MAX_HEALTH,
             camera: OnEditor::default(),
             target_position: Vector2::default(),
             id: i32::default(),
-            last_chunk_pos: Vector2i::new(i32::MAX, i32::MAX), // Invalid initial value
+            last_chunk_pos: Vector2i::new(i32::MAX, i32::MAX),
             last_update_time: 0.0,
-
             item_right: OnEditor::default(),
-            // slash_time: 0.2,
             can_slash: true,
+            slash_timer: 0.0,
             attack_area: OnEditor::default(),
+            hunger: 20,
+            hunger_drain_timer: 0.0,
+            regen_timer: 0.0,
+            starvation_timer: 0.0,
+            indebted: false,
+            indebted_timer: 0.0,
+
+            confused: false,
+            confused_timer: 0.0,
+
+            arrested: false,
+            arrested_timer: 0.0,
         }
     }
 
     fn ready(&mut self) {
+        self.base_mut().add_to_group("player");
+
         let pid = self.base_mut().get_multiplayer_authority();
         self.id = pid;
 
@@ -97,7 +132,11 @@ impl ICharacterBody2D for Rustplayer {
 
         if !is_authority {
             self.camera.make_current();
+            self.heart_ui.bind_mut().set_heart_display(self.health);
         }
+
+        self.attack_area.set_monitoring(true);
+        self.attack_area.set_monitorable(false);
     }
 
     fn process(&mut self, delta: f64) {
@@ -113,24 +152,29 @@ impl ICharacterBody2D for Rustplayer {
                 &StringName::from_str("down").unwrap(),
             );
 
-            let velocity = direction * speed;
+            let velocity = if self.confused {
+                direction * speed * -1.0
+            } else {
+                direction * speed
+            };
 
             if input.is_action_just_pressed(&StringName::from_str("left").unwrap()) {
                 self.sprite.set_flip_h(true);
-                self.heart_ui.bind_mut().set_heart_display(1);
             }
             if input.is_action_just_pressed(&StringName::from_str("right").unwrap()) {
                 self.sprite.set_flip_h(false);
-                self.heart_ui.bind_mut().set_heart_display(-10);
             }
 
-            self.base_mut().set_velocity(velocity);
-            self.base_mut().move_and_slide();
+            if self.arrested {
+                self.base_mut().set_velocity(Vector2::ZERO);
+                self.base_mut().move_and_slide();
+            } else {
+                self.base_mut().set_velocity(velocity);
+                self.base_mut().move_and_slide();
+            }
 
-            // CRITICAL FIX: Only update terrain when chunk changes or periodically
             self.update_terrain_if_needed(delta);
 
-            // Update coordinates display
             let cord = self.get_player_cord_for_display();
             let y_value = if cord.y == 0.0 { cord.y * 1.0 } else { -cord.y };
 
@@ -149,12 +193,14 @@ impl ICharacterBody2D for Rustplayer {
             self.base_mut()
                 .rpc("update_position", &[Variant::from(pos)]);
 
-            // attack handling
             if input.is_action_just_pressed("attack") && self.can_slash {
                 self.can_slash = false;
+                self.slash_timer = 0.0;
                 self.attack();
                 godot_print!("Player {} performed an attack!", self.id);
             }
+
+            self.tick_attack_cooldown(delta);
         } else {
             let pos = self.target_position;
             let smooth_position = self
@@ -163,37 +209,42 @@ impl ICharacterBody2D for Rustplayer {
                 .lerp(pos, 10.0 * delta as f32);
             self.base_mut().set_global_position(smooth_position);
 
-            // CRITICAL FIX: Remote players also need chunk updates but less frequently
             self.last_update_time += delta;
             if self.last_update_time >= 0.5 {
-                // Update every 0.5 seconds for remote players
                 self.update_terrain_if_needed(delta);
                 self.last_update_time = 0.0;
             }
         }
 
-        // let mut loader = load::<Inventory>("res://Collectibles/items/inventory.res");
-
-        // self.base_mut().get_node_and_resource("res://Collectibles/items/inventory.res");
-        // let name = loader.bind_mut().get_slots().get(0).unwrap().get_name();
-        // self.item_right.set_name(name.to_godot());
-
-        // godot_print!("The item name in index 0 is: {}", name)
+        if self.base_mut().is_multiplayer_authority() {
+            self.tick_hunger(delta);
+            self.tick_indebted(delta);
+            self.tick_confused(delta);
+            self.tick_arrested(delta);
+        }
     }
 }
+
 impl Entity for Rustplayer {
     fn take_damage(&mut self, amount: i32) {
-        self.health -= amount;
-        todo!("Implement this across the file")
+        if !self.is_alive() {
+            return;
+        }
+        self.health = (self.health - amount).max(0);
+        self.heart_ui.bind_mut().set_heart_display(self.health);
+        if !self.is_alive() {
+            godot_print!("player dead");
+        }
     }
     fn heal(&mut self, amount: i32) {
-        self.health += amount;
-        todo!("Implement this across the file, refator the heal function at heart its not needed")
+        self.health = (self.health + amount).clamp(0, MAX_HEALTH);
+        self.heart_ui.bind_mut().set_heart_display(self.health);
     }
     fn is_alive(&self) -> bool {
-        self.health >= 0
+        self.health > 0
     }
 }
+
 #[godot_api]
 impl Rustplayer {
     #[rpc(unreliable, any_peer)]
@@ -206,7 +257,6 @@ impl Rustplayer {
         godot_print!("connected and the amount is : {}", amount);
     }
 
-    // OPTIMIZATION: Separate coordinate calculation from terrain updates
     fn get_player_cord_for_display(&mut self) -> Vector2 {
         let mut scene = get_autoload_by_name::<NodeManager>("GlobalNodeManager");
         let scene = scene.bind_mut().get_terrain();
@@ -215,7 +265,6 @@ impl Rustplayer {
         scene.to_local(Vector2::new(cord.x as f32, cord.y as f32))
     }
 
-    // CRITICAL OPTIMIZATION: Only update terrain when player moves to a new chunk
     fn update_terrain_if_needed(&mut self, _delta: f64) {
         let mut scene = get_autoload_by_name::<NodeManager>("GlobalNodeManager");
         let mut scene = scene.bind_mut().get_terrain();
@@ -223,21 +272,12 @@ impl Rustplayer {
         let pos = self.base_mut().get_global_position();
         let current_chunk = scene.local_to_map(pos);
 
-        // Only update if we moved to a different chunk
         if current_chunk != self.last_chunk_pos {
             let id = self.base_mut().get_multiplayer_authority();
             scene.bind_mut().update_player_position(id, current_chunk);
             self.last_chunk_pos = current_chunk;
-
-            // Optional: Debug logging
-            // godot_print!("Player {} moved to chunk ({}, {})", id, current_chunk.x, current_chunk.y);
         }
     }
-
-    // Original function kept for compatibility but optimized
-    // fn player_cord(&mut self) -> Vector2 {
-    //     self.get_player_cord_for_display()
-    // }
 
     fn open(&mut self) {
         self.is_open = true;
@@ -266,46 +306,184 @@ impl Rustplayer {
         }
     }
 
+    fn tick_attack_cooldown(&mut self, delta: f64) {
+        if !self.can_slash {
+            self.slash_timer += delta;
+            if self.slash_timer >= ATTACK_COOLDOWN {
+                self.can_slash = true;
+                self.slash_timer = 0.0;
+            }
+        }
+    }
+
+    fn tick_hunger(&mut self, delta: f64) {
+        let is_moving = self.base_mut().get_velocity().length() > 1.0;
+        let drain_rate = if is_moving { 6.0 } else { 12.0 };
+
+        self.hunger_drain_timer += delta;
+        if self.hunger_drain_timer >= drain_rate {
+            self.hunger_drain_timer = 0.0;
+            if self.hunger > 0 {
+                self.hunger -= 1;
+                godot_print!("Hunger: {}", self.hunger);
+            }
+        }
+
+        if self.hunger >= 18 && self.health < MAX_HEALTH {
+            self.regen_timer += delta;
+            if self.regen_timer >= 4.0 {
+                self.regen_timer = 0.0;
+                self.heal(1);
+                godot_print!("Regenerated 1 HP, health: {}", self.health);
+            }
+        } else {
+            self.regen_timer = 0.0;
+        }
+
+        if self.hunger == 0 && self.health > 1 {
+            self.starvation_timer += delta;
+            if self.starvation_timer >= 4.0 {
+                self.starvation_timer = 0.0;
+                self.take_damage(1);
+                godot_print!("Starving! Health: {}", self.health);
+            }
+        } else {
+            self.starvation_timer = 0.0;
+        }
+    }
+
+    fn tick_confused(&mut self, delta: f64) {
+        if !self.confused {
+            return;
+        }
+        self.confused_timer += delta;
+        if self.confused_timer >= 0.0 {
+            self.confused = false;
+            self.confused_timer = 0.0;
+            godot_print!("Confused wore off.");
+        }
+    }
+
+    #[func]
+    pub fn apply_confused(&mut self, duration: f64) {
+        self.confused = true;
+        self.confused_timer = -duration;
+        godot_print!("Confused applied for {}s!", duration);
+    }
+
+    #[func]
+    pub fn is_confused(&self) -> bool {
+        self.confused
+    }
+
+    fn tick_arrested(&mut self, delta: f64) {
+        if !self.arrested {
+            return;
+        }
+        self.arrested_timer += delta;
+        if self.arrested_timer >= 0.0 {
+            self.arrested = false;
+            self.arrested_timer = 0.0;
+            godot_print!("Arrest released.");
+        }
+    }
+
+    #[func]
+    pub fn apply_arrested(&mut self, duration: f64) {
+        self.arrested = true;
+        self.arrested_timer = -duration;
+        godot_print!("Player arrested for {}s!", duration);
+    }
+
+    #[func]
+    pub fn is_arrested(&self) -> bool {
+        self.arrested
+    }
+
+    fn tick_indebted(&mut self, delta: f64) {
+        if !self.indebted {
+            return;
+        }
+        self.indebted_timer += delta;
+        if self.indebted_timer >= INDEBTED_DURATION {
+            self.indebted = false;
+            self.indebted_timer = 0.0;
+            godot_print!("Indebted debuff wore off.");
+        }
+    }
+
+    fn effective_attack_damage(&self) -> i32 {
+        if self.indebted {
+            (ATTACK_DAMAGE - INDEBTED_ATTACK_REDUCTION).max(1)
+        } else {
+            ATTACK_DAMAGE
+        }
+    }
+
+    fn attack(&mut self) {
+        let damage = self.effective_attack_damage();
+        let attack_area = self.attack_area.clone();
+
+        for body in attack_area.get_overlapping_bodies().iter_shared() {
+            if let Ok(mut crocodile) = body
+                .clone()
+                .try_cast::<crate::mobs::hostile::crocodile::Crocodile>()
+            {
+                crocodile.bind_mut().take_damage(damage);
+            } else if let Ok(mut troll) = body
+                .clone()
+                .try_cast::<crate::mobs::hostile::troll::Troll>()
+            {
+                troll.bind_mut().take_damage(damage);
+            } else if let Ok(mut order_force) =
+                body.try_cast::<crate::mobs::hostile::order_force::OrderForce>()
+            {
+                order_force.bind_mut().take_damage(damage);
+            }
+        }
+    }
+
+    #[func]
+    pub fn apply_indebted(&mut self) {
+        self.indebted = true;
+        self.indebted_timer = 0.0;
+        godot_print!(
+            "Player is now Indebted. Attack reduced by {} for {}s.",
+            INDEBTED_ATTACK_REDUCTION,
+            INDEBTED_DURATION
+        );
+    }
+
+    #[func]
+    pub fn is_indebted(&self) -> bool {
+        self.indebted
+    }
+
     #[func]
     pub fn set_health(&mut self, health: i32) {
-        self.heart_ui.bind_mut().set_heart_display(health);
-        self.health = health;
+        self.health = health.clamp(0, MAX_HEALTH);
+        self.heart_ui.bind_mut().set_heart_display(self.health);
     }
 
     #[func]
     pub fn get_health(&self) -> i32 {
         self.health
     }
-    //
-    // pub fn player_hp(&mut self, num: i32) {
-    //     self.heart_ui.bind_mut().heal(num);
-    //     self.health = num;
-    // }
 
-    fn attack(&mut self) {
-        self.attack_area.set_monitoring(true);
-        self.attack_area.set_monitorable(true);
+    #[func]
+    pub fn get_hunger(&self) -> i32 {
+        self.hunger
+    }
 
-        let mut attack_area = self.attack_area.clone();
-        let base = self.base().clone();
-        godot::task::spawn(async move {
-            godot_print!("starting task!");
-            let timer = base.get_tree().create_timer(0.5);
-            Signal::from_object_signal(&timer, "timeout")
-                .to_future::<()>()
-                .await;
+    #[func]
+    pub fn set_hunger(&mut self, hunger: i32) {
+        self.hunger = hunger.clamp(0, 20);
+    }
 
-            for body in attack_area.get_overlapping_bodies().iter_shared() {
-                godot_print!("Found overlapping body during attack: {}", body);
-                if body.is_in_group("enemy") {
-                    godot_print!("Hit an enemy!");
-                }
-            }
-            godot_print!("wait ended!");
-
-            attack_area.set_monitoring(false);
-            attack_area.set_monitorable(false);
-        });
+    #[func]
+    pub fn feed(&mut self, amount: i32) {
+        self.hunger = (self.hunger + amount).clamp(0, 20);
+        godot_print!("Fed player, hunger: {}", self.hunger);
     }
 
     #[func]

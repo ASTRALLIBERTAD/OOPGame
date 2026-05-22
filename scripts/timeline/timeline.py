@@ -4,7 +4,7 @@ import plotly.graph_objects as go
 from datetime import datetime
 import textwrap
 
-TARGET_FINISH_DATE = "2026-06-30"
+TARGET_FINISH_DATE = "2026-06-3"
 VS_BG = "#1E1E1E"        # Editor Background
 VS_HEADER = "#252526"    # Header Background
 VS_BORDER = "#454545"    # Borders

@@ -1,5 +1,5 @@
 use godot::classes::{
-    Button, ENetMultiplayerPeer, HBoxContainer, INode, Json, Label, Node, VBoxContainer,
+    ENetMultiplayerPeer, HBoxContainer, INode, Json, Label, Node, TextureButton, VBoxContainer,
 };
 use godot::prelude::*;
 use std::collections::HashMap;
@@ -37,7 +37,7 @@ impl INode for MultiplayerScene {
         self.set_up();
         let callable = self.base().callable("on_back_pressed");
         self.base_mut()
-            .get_node_as::<Button>("CanvasLayer/back")
+            .get_node_as::<TextureButton>("CanvasLayer/back")
             .connect("pressed", &callable);
     }
     fn exit_tree(&mut self) {

@@ -96,7 +96,10 @@ func _on_save_pressed() -> void:
 
 
 func _on_back_pressed() -> void:
-	#%TouchControls.visible = true
+	var player_menus = %PLAYERS.get_node("Control/CanvasLayer") as CanvasLayer 
+	player_menus.visible = true
+	var player_control = %PLAYERS.get_node("Control/TouchControls") as CanvasLayer 
+	player_control.visible = true
 	%Panel.visible = false
 	get_tree().paused = false
 
@@ -155,13 +158,3 @@ func cleanUp():
 	$Broadcaster.stop()
 	if udp != null:
 		udp.close()
-
-# This function will handle changing the scene back to the Main Menu
-func _on_back_button_pressed() -> void:
-	# Change this file path string if your main menu scene lives somewhere else!
-	var main_menu_path = "res://UserInterface/MainMenu.scn" 
-	
-	if ResourceLoader.exists(main_menu_path):
-		get_tree().change_scene_to_file(main_menu_path)
-	else:
-		print("Error: Could not find MainMenu scene file at: ", main_menu_path)

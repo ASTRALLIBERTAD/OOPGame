@@ -32,6 +32,7 @@ pub struct Snatcher {
 
     mob_state: MobState,
     has_stolen: bool,
+    stole_piso_successfully: bool,
     flee_target: Option<Vector2>,
 }
 
@@ -42,12 +43,13 @@ impl ICharacterBody2D for Snatcher {
             base,
             sprite: OnEditor::default(),
             health: 15,
-            speed: 150.0,
-            aggro_range: 180.0,
+            speed: 50.0,
+            aggro_range: 120.0,
             steal_amount: 50,
-            steal_range: 30.0,
+            steal_range: 20.0,
             mob_state: MobState::Idle,
             has_stolen: false,
+            stole_piso_successfully: false,
             flee_target: None,
         }
     }
@@ -161,10 +163,24 @@ impl Snatcher {
         if self.has_stolen {
             return;
         }
+
         let steal_amount = self.steal_amount;
-        self.base_mut()
-            .emit_signal("piso_stolen", &[Variant::from(steal_amount)]);
-        godot_print!("Snatcher stole {} piso!", self.steal_amount);
+        let had_piso = player.spend_piso(steal_amount);
+        self.stole_piso_successfully = had_piso;
+
+        let msg = if had_piso {
+            self.base_mut()
+                .emit_signal("piso_stolen", &[Variant::from(steal_amount)]);
+            format!("Snatcher stole {} piso!", steal_amount)
+        } else {
+            "Snatcher tried to steal but player had no piso.".to_string()
+        };
+
+        player
+            .base_mut()
+            .emit_signal("message", &[Variant::from(msg.clone())]);
+
+        godot_print!("{}", msg);
 
         self.has_stolen = true;
 
@@ -173,7 +189,6 @@ impl Snatcher {
         let away = (my_pos - player_pos).normalized();
         self.flee_target = Some(my_pos + away * 600.0);
     }
-
     #[func]
     pub fn set_health(&mut self, health: i32) {
         self.health = health.clamp(0, 15);

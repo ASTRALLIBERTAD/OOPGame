@@ -258,7 +258,7 @@ impl Entity for Rustplayer {
 #[godot_api]
 impl Rustplayer {
     #[signal]
-    fn message(message: String);
+    fn message(text: String);
     #[signal]
     fn piso_changed(new_total: i32);
 
@@ -451,9 +451,29 @@ impl Rustplayer {
             {
                 troll.bind_mut().take_damage(damage);
             } else if let Ok(mut order_force) =
-                body.try_cast::<crate::mobs::hostile::order_force::OrderForce>()
+                body.clone()
+                    .try_cast::<crate::mobs::hostile::order_force::OrderForce>()
             {
                 order_force.bind_mut().take_damage(damage);
+            } else if let Ok(mut thug) =
+                body.clone()
+                    .try_cast::<crate::mobs::hostile::commissioned_thug::CommissionedThug>()
+            {
+                thug.bind_mut().take_damage(damage);
+            } else if let Ok(mut snatcher) = body
+                .clone()
+                .try_cast::<crate::mobs::hostile::snatcher::Snatcher>()
+            {
+                snatcher.bind_mut().take_damage(damage);
+            } else if let Ok(mut broker) =
+                body.clone()
+                    .try_cast::<crate::mobs::hostile::corruption_broker::CorruptionBroker>()
+            {
+                broker.bind_mut().take_damage(damage);
+            } else if let Ok(mut vessel) =
+                body.try_cast::<crate::mobs::hostile::smuggler_vessel::SmuglerVessel>()
+            {
+                vessel.bind_mut().take_damage(damage);
             }
         }
     }
@@ -468,6 +488,11 @@ impl Rustplayer {
             INDEBTED_DURATION
         );
     }
+
+    // pub fn notify(&mut self, text: &str) {
+    //     self.base_mut()
+    //         .emit_signal("message", &[Variant::from(GString::from(text))]);
+    // }
 
     #[func]
     pub fn is_indebted(&self) -> bool {
@@ -541,7 +566,13 @@ impl Rustplayer {
     pub fn set_piso(&mut self, amount: i32) {
         self.piso = amount.max(0);
         let piso = self.piso;
-        self.base_mut()
-            .emit_signal("piso_changed", &[Variant::from(piso)]);
+        let mut event_bus = get_autoload_by_name::<Node>("EventBus");
+        event_bus.call(
+            "emit_signal",
+            &[
+                Variant::from(GString::from("piso_changed")),
+                Variant::from(piso),
+            ],
+        );
     }
 }

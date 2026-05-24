@@ -1,6 +1,7 @@
 use godot::classes::{AnimatedSprite2D, CharacterBody2D, ICharacterBody2D};
 use godot::obj::WithBaseField;
 use godot::prelude::*;
+use godot::tools::get_autoload_by_name;
 
 use crate::entity::{Entity, HostileBehavior, MobState};
 use crate::rustplayer::Rustplayer;
@@ -116,16 +117,18 @@ impl Entity for Snatcher {
     fn take_damage(&mut self, amount: i32) {
         self.health = (self.health - amount).max(0);
         if !self.is_alive() {
-            if self.has_stolen {
+            if self.has_stolen && self.stole_piso_successfully {
                 let steal_amount = self.steal_amount;
-                self.base_mut()
-                    .emit_signal("drop_stolen_piso", &[Variant::from(steal_amount)]);
+                let pos = self.base_mut().get_global_position();
+                self.base_mut().emit_signal(
+                    "drop_stolen_piso",
+                    &[Variant::from(steal_amount), Variant::from(pos)],
+                );
             }
             self.mob_state = MobState::Dead;
             self.base_mut().queue_free();
         }
     }
-
     fn heal(&mut self, amount: i32) {
         self.health = (self.health + amount).min(15);
     }
@@ -157,7 +160,7 @@ impl Snatcher {
     fn piso_stolen(amount: i32);
 
     #[signal]
-    fn drop_stolen_piso(amount: i32);
+    fn drop_stolen_piso(amount: i32, position: Vector2);
 
     fn try_steal(&mut self, player: &mut godot::obj::GdMut<Rustplayer>) {
         if self.has_stolen {
@@ -176,10 +179,14 @@ impl Snatcher {
             "Snatcher tried to steal but player had no piso.".to_string()
         };
 
-        player
-            .base_mut()
-            .emit_signal("message", &[Variant::from(msg.clone())]);
-
+        let mut event_bus = get_autoload_by_name::<Node>("EventBus");
+        event_bus.call(
+            "emit_signal",
+            &[
+                Variant::from(GString::from("message")),
+                Variant::from(GString::from(&msg.clone())),
+            ],
+        );
         godot_print!("{}", msg);
 
         self.has_stolen = true;

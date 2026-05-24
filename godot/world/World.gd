@@ -110,7 +110,7 @@ func _on_host_pressed() -> void:
 	multiplayer.peer_connected.connect(
 	func(pid):
 		print(pid)
-		var seeds = terrain.seedser
+		var seeds = terrain.world_seed
 		$"..".rpc("seed", seeds)
 		
 		rpc("add_player", pid)

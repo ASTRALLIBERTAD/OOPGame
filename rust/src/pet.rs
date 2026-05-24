@@ -1,8 +1,9 @@
-use godot::classes::{AnimatedSprite2D, CharacterBody2D, ICharacterBody2D};
+use godot::classes::{AnimatedSprite2D, CharacterBody2D, ICharacterBody2D,Input};
 use godot::prelude::*;
+use godot::global::Key;
 
 use crate::rustplayer::Rustplayer;
-use crate::neutral_entity::NeutralEntity;
+use crate::entity::Entity;
 
 #[derive(GodotClass)]
 #[class(base=CharacterBody2D)]
@@ -16,6 +17,9 @@ struct Pet {
 
     current_health: i32,
     max_health: i32,
+
+    a_was_pressed: bool,
+    d_was_pressed: bool,
 
     #[export]
     player: OnEditor<Gd<Rustplayer>>,
@@ -37,15 +41,38 @@ impl ICharacterBody2D for Pet {
             stop_threshold: 10.0,
             follow_distance: 100.0,
 
-            current_health: 10,
-            max_health: 10,
-
+            current_health: 15,
+            max_health: 15,
+            
+            a_was_pressed: false,
+            d_was_pressed: false,
+            
             player: OnEditor::default(),
             sprite: OnEditor::default(),
         }
     }
 
     fn physics_process(&mut self, _delta: f64) {
+
+        let input = Input::singleton();
+
+        let a_pressed = 
+
+          input.is_physical_key_pressed(Key::A);
+
+        let d_pressed =
+          input.is_physical_key_pressed(Key::D);
+
+        if a_pressed && !self.a_was_pressed {
+    self.heal(1);
+       }
+
+       if d_pressed && !self.d_was_pressed {
+          self.take_damage(1);
+        }
+
+        self.a_was_pressed = a_pressed;
+        self.d_was_pressed = d_pressed;
 
         if !self.player.is_instance_valid() {
             return;
@@ -94,17 +121,45 @@ impl ICharacterBody2D for Pet {
 
 #[godot_api]
 impl Pet {
-
-    #[func]
+    #[allow(dead_code)]
     fn test_damage(&mut self) {
 
-        self.damage(1);
+     self.take_damage(1);
     }
-
-    #[func]
+    #[allow(dead_code)]
     fn test_heal(&mut self) {
 
-        self.heal(1);
+      self.heal(1);
+    }
+
+
+    fn update_health(&mut self, change: i32) {
+
+        self.current_health =
+            (
+                self.current_health + change
+            )
+            .clamp(0, self.max_health);
+
+        godot_print!(
+            "Cat HP: {} / {}",
+            self.current_health,
+            self.max_health
+        );
+
+        if self.current_health <= 0 {
+
+            godot_print!("Cat died");
+
+            self.is_following = false;
+
+            self.stop_moving();
+
+            self.sprite
+                .play_ex()
+                .name("idle")
+                .done();
+        }
     }
 
     fn move_toward_player(&mut self) {
@@ -146,57 +201,20 @@ impl Pet {
     }
 }
 
-impl NeutralEntity for Pet {
+impl Entity for Pet {
 
-    fn damage(&mut self,amount: i32) {
+    fn take_damage(&mut self, amount: i32) {
 
-        self.current_health =
-            (
-                self.current_health - amount
-            )
-            .clamp(0, self.max_health);
-
-        godot_print!(
-            "Cat HP: {} / {}",
-            self.current_health,
-            self.max_health
-        );
-
-        if self.current_health <= 0 {
-
-            godot_print!("Cat died");
-
-            self.stop_moving();
-
-            self.sprite
-                .play_ex()
-                .name("idle")
-                .done();
-        }
+        self.update_health(-amount);
     }
 
     fn heal(&mut self, amount: i32) {
 
-        self.current_health =
-            (
-                self.current_health + amount
-            )
-            .clamp(0, self.max_health);
-
-        godot_print!(
-            "Cat HP: {} / {}",
-            self.current_health,
-            self.max_health
-        );
+        self.update_health(amount);
     }
 
-    fn get_health(&self) -> i32 {
+    fn is_alive(&self) -> bool {
 
-        self.current_health
-    }
-
-    fn is_dead(&self) -> bool {
-
-        self.current_health <= 0
+        self.current_health > 0
     }
 }

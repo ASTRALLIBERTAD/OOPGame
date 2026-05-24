@@ -7,7 +7,7 @@ pub enum MobState {
     Aggro,
     Fleeing,
     Dead,
-}
+}   
 #[allow(dead_code)]
 pub trait Entity {
     // NOTE use i32 instead of f32, f32 is float or a decimal value

@@ -16,7 +16,7 @@ struct PlayerData {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct SaveGameInfo {
+struct SaveGameInfo {
     #[serde(rename = "dateTime")]
     date_time: f64,
     #[serde(rename = "imgPath")]
@@ -25,17 +25,22 @@ pub struct SaveGameInfo {
     seed: i32,
 }
 
+#[derive(Serialize, Deserialize, Clone)]
+struct ConfigSettings {
+    #[serde(rename = "playerName")]
+    player_name: String,
+    volume: f32,
+}
+
 #[derive(GodotClass)]
 #[class(base = Node, init)]
-pub struct SaveManagerRust {
+struct SaveManagerRust {
     #[base]
     base: Base<Node>,
 
+    #[var(get, set)]
     current_world_name: StringName,
 
-    // #[export]
-    // #[var(get = get_load_game, set = set_load_game)]
-    // load_game: GString,
     #[export]
     #[var(get = get_seed, set = set_seed)]
     world_seed: i32,
@@ -46,23 +51,24 @@ pub struct SaveManagerRust {
 #[godot_api]
 impl SaveManagerRust {
     #[func]
-    pub fn get_os(&self) -> String {
+    fn get_os(&self) -> String {
         let mut baser: &str = "";
         if OS == "windows" {
             baser = "user://";
             godot_print!("windows");
-        }
-        if OS == "android" {
-            baser = "/storage/emulated/0/Android/data/com.example.proj/files/";
+        } else if OS == "android" {
+            baser = "/storage/emulated/0/Android/data/com.oopgame.project/files/";
             godot_print!("android");
+        } else if OS == "linux" {
+            baser = "user://";
+            godot_print!("linux");
         }
         godot_print!("{}", baser);
         (&baser).to_string()
     }
 
     #[func]
-    pub fn save_game_rust(&mut self, name: String) {
-        // self.load_game = name.clone().to_godot();
+    fn save_game_rust(&mut self, name: String) {
         self.current_world_name = StringName::from(&name);
 
         let base_path = &self.get_os();
@@ -102,22 +108,20 @@ impl SaveManagerRust {
 
         match FileAccess::open(&save_path, ModeFlags::WRITE) {
             Some(mut file) => {
-                let position = self.get_player().get_global_position();
+                let Some(mut player) = self.get_player() else {
+                    godot_error!("No player found, skipping save");
+                    return;
+                };
+                let position = player.get_global_position();
                 let player_position = PlayerData {
                     position_x: position.x,
                     position_y: position.y,
-                    health: self
-                        .get_player()
-                        .bind_mut()
-                        .get_heart_ui()
-                        .bind_mut()
-                        .current_health,
+                    health: player.bind_mut().get_health(),
                 };
 
                 match bincode::serialize(&player_position) {
                     Ok(serialized_data) => {
                         if serialized_data.len() <= 1048576 {
-                            // size limit (4KB)
                             let byte_array = PackedByteArray::from(serialized_data);
                             file.store_buffer(&byte_array);
                             godot_print!("Game saved successfully at {}", save_path);
@@ -187,16 +191,17 @@ impl SaveManagerRust {
 
             let data_slice: &[u8] = data.as_slice();
 
-            // Deserialize the player position data
             match bincode::deserialize::<PlayerData>(data_slice) {
                 Ok(player_data) => {
-                    self.get_player().set_global_position(Vector2::new(
+                    let Some(mut player) = self.get_player() else {
+                        godot_error!("No player found, skipping load");
+                        return;
+                    };
+                    player.set_global_position(Vector2::new(
                         player_data.position_x,
                         player_data.position_y,
                     ));
-                    self.get_player().bind_mut().
-                    // health = player_data.health;
-                    set_health(player_data.health);
+                    player.bind_mut().set_health(player_data.health);
                     godot_print!("Player position loaded successfully from {}", save_path);
                     godot_print!("saved heart {}", player_data.health);
                 }
@@ -209,13 +214,12 @@ impl SaveManagerRust {
         }
     }
 
-    fn get_player(&mut self) -> Gd<Rustplayer> {
-        return self
-            .base_mut()
+    fn get_player(&mut self) -> Option<Gd<Rustplayer>> {
+        self.base_mut()
             .get_tree()
-            .get_root()
-            .unwrap()
-            .get_node_as::<Rustplayer>("/root/main/World/PLAYERS");
+            .get_nodes_in_group("player")
+            .iter_shared()
+            .find_map(|node| node.try_cast::<Rustplayer>().ok())
     }
 
     #[func]
@@ -260,7 +264,6 @@ impl SaveManagerRust {
 
         if let Some(mut dir) = godot::classes::DirAccess::open(&save_path) {
             if dir.dir_exists(&save_path) {
-                // Call recursive delete
                 if self.delete_directory_recursive(&save_path) {
                     godot_print!("Save game '{}' deleted successfully.", name);
                 } else {
@@ -274,7 +277,6 @@ impl SaveManagerRust {
         }
     }
 
-    /// Recursively deletes a directory and its contents.
     fn delete_directory_recursive(&self, path: &str) -> bool {
         if let Some(mut dir) = godot::classes::DirAccess::open(path) {
             dir.list_dir_begin();
@@ -282,7 +284,7 @@ impl SaveManagerRust {
             loop {
                 let entry = dir.get_next();
                 if entry.is_empty() {
-                    break; // no more entries
+                    break;
                 }
 
                 if entry == "." || entry == ".." {
@@ -292,7 +294,6 @@ impl SaveManagerRust {
                 let full_path = format!("{}/{}", path, entry);
 
                 if dir.current_is_dir() {
-                    // recursive call
                     if !self.delete_directory_recursive(&full_path) {
                         return false;
                     }
@@ -303,7 +304,6 @@ impl SaveManagerRust {
 
             dir.list_dir_end();
 
-            // Now delete the empty directory itself
             if let Some(mut parent) = godot::classes::DirAccess::open(
                 std::path::Path::new(path)
                     .parent()
@@ -361,31 +361,13 @@ impl SaveManagerRust {
                 godot_error!("Failed to open save file at {}", save_path);
             }
         }
-
-        // let save_game_json = Json::stringify_ex().done();
     }
 
-    // func save_world():
-    // var world_name = get_world_name()
-    // print(world_name)
-
-    // var SaveGameInfo := {
-    // 	"name" : world_name,
-    // 	"imgPath" : RustSaveManager1.get_os() + "games/" + world_name + "/" + world_name + ".png",
-    // 	"dateTime" : Time.get_unix_time_from_system(),
-    // 	"seed": WorldSeed
-    // }
-    // var SaveGameJson := JSON.stringify(SaveGameInfo)
-
-    // var SaveGameFile := FileAccess.open( RustSaveManager1.get_os() + "games/" + world_name + "/" + world_name + "_saveGame.json", FileAccess.WRITE)
-    // SaveGameFile.store_string(SaveGameJson)
-
-    // var screenshot := get_viewport().get_texture().get_image()
-    // screenshot.save_png(RustSaveManager1.get_os() + "games/" + world_name + "/" + world_name + ".png")
-
     #[func]
-    pub fn set_player_health(&mut self, health: i32) {
-        self.get_player().bind_mut().set_health(health);
+    fn set_player_health(&mut self, health: i32) {
+        if let Some(mut player) = self.get_player() {
+            player.bind_mut().set_health(health);
+        }
         self.player_health = health;
         godot_print!("Player health set to: {}", health);
     }
@@ -396,6 +378,11 @@ impl SaveManagerRust {
     }
 
     #[func]
+    fn get_current_world_name(&self) -> StringName {
+        self.current_world_name.clone()
+    }
+
+    #[func]
     fn set_seed(&mut self, seed: i32) {
         self.world_seed = seed;
     }
@@ -403,5 +390,59 @@ impl SaveManagerRust {
     #[func]
     fn get_seed(&self) -> i32 {
         self.world_seed
+    }
+
+    #[func]
+    fn save_config_json(&self, player_name: String, volume: f32) {
+        let base_path = self.get_os();
+        let config_path = format!("{}/config.json", base_path);
+
+        let settings = ConfigSettings {
+            player_name,
+            volume,
+        };
+
+        match FileAccess::open(&config_path, ModeFlags::WRITE) {
+            Some(mut file) => match serde_json::to_string(&settings) {
+                Ok(json_string) => {
+                    file.store_string(&json_string);
+                    godot_print!("Config settings saved successfully at {}", config_path);
+                }
+                Err(e) => {
+                    godot_error!("Failed to serialize config json: {}", e);
+                }
+            },
+            None => {
+                godot_error!("Failed to create config file at {}", config_path);
+            }
+        }
+    }
+
+    #[func]
+    fn get_config_player_name(&self) -> String {
+        let base_path = self.get_os();
+        let config_path = format!("{}/config.json", base_path);
+
+        if let Some(file) = FileAccess::open(&config_path, ModeFlags::READ) {
+            let json_string = file.get_as_text().to_string();
+            if let Ok(settings) = serde_json::from_str::<ConfigSettings>(&json_string) {
+                return settings.player_name;
+            }
+        }
+        "ASTRAL".to_string()
+    }
+
+    #[func]
+    fn get_config_volume(&self) -> f32 {
+        let base_path = self.get_os();
+        let config_path = format!("{}/config.json", base_path);
+
+        if let Some(file) = FileAccess::open(&config_path, ModeFlags::READ) {
+            let json_string = file.get_as_text().to_string();
+            if let Ok(settings) = serde_json::from_str::<ConfigSettings>(&json_string) {
+                return settings.volume;
+            }
+        }
+        50.0 // Default fallback value
     }
 }

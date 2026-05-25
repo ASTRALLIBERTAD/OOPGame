@@ -1,22 +1,20 @@
-mod pet;
+pub mod entity;
 mod example;
+pub mod heart;
+pub mod heart_display;
+mod inv_slot;
+mod inventory;
+mod item_collectibles;
+mod item_slot;
+mod main_node;
+pub mod mobs;
+mod multiplayer_scene;
+mod node_manager;
+mod pet;
 mod rustplayer;
 mod save_manager_rusts;
 mod terrain;
 mod world;
-mod main_node;
-mod multiplayer;
-mod multiplayer_scene;
-mod item_collectibles;
-mod inventory;
-mod item_slot;
-mod inv_slot;
-mod heart;
-mod heart_display;
-mod example_terrrain;
-mod node_manager;
-mod entity;
-
 use godot::prelude::*;
 
 pub struct RustExtension;

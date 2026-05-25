@@ -1,4 +1,4 @@
-[gd_scene load_steps=17 format=3 uid="uid://v2h65dti34ep"]
+[gd_scene format=3 uid="uid://v2h65dti34ep"]
 
 [ext_resource type="Script" uid="uid://ia6topecv0hu" path="res://Collectibles/coin.gd" id="1_7ay75"]
 [ext_resource type="Texture2D" uid="uid://bfn6ao6636v6v" path="res://Assets/brackeys_platformer_assets/brackeys_platformer_assets/sprites/coin.png" id="2_ks7qo"]
@@ -98,18 +98,18 @@ animations = [{
 [sub_resource type="CircleShape2D" id="CircleShape2D_sv7wk"]
 radius = 7.2111
 
-[node name="coin" type="Area2D"]
+[node name="coin" type="Area2D" unique_id=1906829267]
 position = Vector2(117, 0)
 script = ExtResource("1_7ay75")
 
-[node name="AnimatedSprite2D" type="AnimatedSprite2D" parent="."]
+[node name="AnimatedSprite2D" type="AnimatedSprite2D" parent="." unique_id=1750882428]
 texture_filter = 1
 sprite_frames = SubResource("SpriteFrames_c0u5d")
 animation = &"rotatingcoin"
 autoplay = "rotatingcoin"
 frame_progress = 0.817
 
-[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+[node name="CollisionShape2D" type="CollisionShape2D" parent="." unique_id=371768657]
 shape = SubResource("CircleShape2D_sv7wk")
 
 [connection signal="body_entered" from="." to="." method="_on_body_entered"]

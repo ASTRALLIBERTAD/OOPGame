@@ -17,7 +17,7 @@ func _on_button_button_down():
 	if error == OK:
 		multiplayer.multiplayer_peer = peer
 		print("Connecting ", ip ) 
-		get_tree().change_scene_to_file("res://World.scn")
+		get_tree().change_scene_to_file("res://world/World.scn")
 	else:
 		print("Failed to create client. Error code:", error)
 	pass # Replace with function body.

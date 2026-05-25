@@ -1,20 +1,23 @@
 use godot::classes::{
-    ENetMultiplayerPeer, HBoxContainer, INode, Json, Label, Node, PacketPeerUdp, VBoxContainer,
+    ENetMultiplayerPeer, HBoxContainer, INode, Json, Label, Node, TextureButton, VBoxContainer,
 };
 use godot::prelude::*;
-
-const LISTEN_PORT: i32 = 8912;
+use std::collections::HashMap;
+// use local_ip_address::local_ip;
+use std::net::UdpSocket;
+const LISTEN_PORT: u16 = 8912;
 
 #[derive(GodotClass)]
 #[class(base=Node)]
 pub struct MultiplayerScene {
     base: Base<Node>,
-    listener: Gd<PacketPeerUdp>,
+    socket: Option<UdpSocket>,
     #[export]
     player: OnEditor<Gd<PackedScene>>,
-
     #[export]
     server_info: OnEditor<Gd<PackedScene>>,
+    last_seen: HashMap<String, f64>,
+    elapsed: f64,
 }
 
 #[godot_api]
@@ -22,114 +25,165 @@ impl INode for MultiplayerScene {
     fn init(base: Base<Node>) -> Self {
         Self {
             base,
-            listener: PacketPeerUdp::new_gd(),
+            socket: None,
             player: OnEditor::default(),
             server_info: OnEditor::default(),
+            last_seen: HashMap::new(),
+            elapsed: 0.0,
         }
     }
 
     fn ready(&mut self) {
         self.set_up();
+        let callable = self.base().callable("on_back_pressed");
+        self.base_mut()
+            .get_node_as::<TextureButton>("CanvasLayer/back")
+            .connect("pressed", &callable);
     }
-
     fn exit_tree(&mut self) {
-        self.clean_up();
+        self.socket = None;
     }
 
-    fn process(&mut self, _delta: f64) {
-        while self.listener.get_available_packet_count() > 0 {
-            let serverip = self.listener.get_packet_ip();
-            let serverport = self.listener.get_packet_port();
-            let packet = self.listener.get_packet();
+    fn process(&mut self, delta: f64) {
+        self.elapsed += delta;
+        let now = self.elapsed;
 
-            let data = packet.get_string_from_ascii();
+        let mut packets: Vec<(String, String)> = Vec::new();
 
-            let mut json = Json::new_gd();
-            let parse_result = json.parse(&data);
-
-            if parse_result == godot::global::Error::OK {
-                let room_info = json.get_data();
-                let Ok(dict) = room_info.try_to::<Dictionary<GString, Variant>>() else {
-                    godot_error!("Expected a Dictionary from JSON");
-                    return;
-                };
-
-                godot_print!(
-                    "Server IP: {} Server Port: {} Room info: {:?}",
-                    serverip,
-                    serverport,
-                    dict
-                );
-
-                let name_str = dict
-                    .get("name")
-                    .unwrap_or(Variant::from("Unnamed"))
-                    .to::<GString>();
-
-                let mut vbox = self
-                    .base_mut()
-                    .get_node_as::<VBoxContainer>("CanvasLayer/Panel/VBoxContainer");
-
-                let mut room_exist = false;
-
-                for i in vbox.get_children().iter_shared() {
-                    if i.get_name().to_string() == name_str.to_string() {
-                        let ip_label = i.try_get_node_as::<Label>("Ip");
-                        if let Some(mut ip_label) = ip_label {
-                            ip_label.set_text(&serverip);
-                        }
-                        room_exist = true;
+        if let Some(socket) = &self.socket {
+            let mut buf = [0u8; 1024];
+            loop {
+                match socket.recv_from(&mut buf) {
+                    Ok((len, src_addr)) => {
+                        let data = match std::str::from_utf8(&buf[..len]) {
+                            Ok(s) => s.to_string(),
+                            Err(_) => {
+                                godot_error!("Invalid UTF-8");
+                                continue;
+                            }
+                        };
+                        packets.push((src_addr.ip().to_string(), data));
+                    }
+                    Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
+                    Err(e) => {
+                        godot_error!("Socket error: {}", e);
                         break;
                     }
                 }
+            }
+        }
 
-                if !room_exist {
-                    let mut current_info = self.server_info.instantiate_as::<HBoxContainer>();
+        for (ip, data) in packets {
+            let serverip = GString::from(&ip);
+            let mut json = Json::new_gd();
+            if json.parse(&data) != godot::global::Error::OK {
+                continue;
+            }
 
-                    current_info.set_name(&name_str.to_string());
+            let room_info = json.get_data();
+            let Ok(dict) = room_info.try_to::<Dictionary<Variant, Variant>>() else {
+                continue;
+            };
 
-                    // Access children relative to the instance itself
-                    if let Some(mut ip_label) = current_info.try_get_node_as::<Label>("Ip") {
+            let key = GString::from("name").to_variant();
+            let name_str = dict
+                .get(&key)
+                .unwrap_or_else(|| Variant::from("Unnamed"))
+                .to::<GString>();
+
+            self.last_seen.insert(name_str.to_string(), now);
+
+            let mut vbox = self
+                .base_mut()
+                .get_node_as::<VBoxContainer>("CanvasLayer/Panel/VBoxContainer");
+
+            let mut room_exists = false;
+            for i in vbox.get_children().iter_shared() {
+                if i.get_name().to_string() == name_str.to_string() {
+                    if let Some(mut ip_label) = i.try_get_node_as::<Label>("Ip") {
                         ip_label.set_text(&serverip);
                     }
-
-                    if let Some(mut name_label) = current_info.try_get_node_as::<Label>("Name") {
-                        name_label.set_text(&name_str);
-                    }
-
-                    // Add it to the server list
-                    vbox.add_child(&current_info);
-
-                    // Connect signal
-                    let callable = self.base_mut().callable("joinby_ip");
-                    current_info.connect("joinGame", &callable);
-
-                    godot_print!("Added new server: {}", name_str);
+                    room_exists = true;
+                    break;
                 }
             }
+
+            if !room_exists {
+                let mut current_info = self.server_info.instantiate_as::<HBoxContainer>();
+                current_info.set_name(&name_str.to_string());
+                if let Some(mut ip_label) = current_info.try_get_node_as::<Label>("Ip") {
+                    ip_label.set_text(&serverip);
+                }
+                if let Some(mut name_label) = current_info.try_get_node_as::<Label>("Name") {
+                    name_label.set_text(&name_str);
+                }
+                vbox.add_child(&current_info);
+                let callable = self.base_mut().callable("joinby_ip");
+                current_info.connect("joinGame", &callable);
+            }
+        }
+
+        const TIMEOUT: f64 = 5.0;
+        let stale: Vec<String> = self
+            .last_seen
+            .iter()
+            .filter(|(_, &t)| now - t > TIMEOUT)
+            .map(|(k, _)| k.clone())
+            .collect();
+
+        for name in stale {
+            self.last_seen.remove(&name);
+            let mut vbox = self
+                .base_mut()
+                .get_node_as::<VBoxContainer>("CanvasLayer/Panel/VBoxContainer");
+            for child in vbox.get_children().iter_shared() {
+                if child.get_name().to_string() == name {
+                    vbox.remove_child(&child);
+                    child.clone().free();
+                    break;
+                }
+            }
+            godot_print!("Removed stale server: {}", name);
         }
     }
 }
 
 #[godot_api]
 impl MultiplayerScene {
-    #[func]
+    #[signal]
+    fn join_game(ip: GString);
+
+    // Note for testing, do not remove until it becomes stable
+
+    // fn get_broadcast_address(&self) -> String {
+    //     match local_ip() {
+    //         Ok(ip) => {
+    //             // Convert x.x.x.x to x.x.x.255 (assumes /24 subnet)
+    //             let mut octets = match ip {
+    //                 std::net::IpAddr::V4(v4) => v4.octets(),
+    //                 _ => return "255.255.255.255".to_string(),
+    //             };
+    //             octets[3] = 255;
+    //             format!("{}.{}.{}.{}", octets[0], octets[1], octets[2], octets[3])
+    //         }
+    //         Err(_) => "255.255.255.255".to_string(),
+    //     }
+    // }
     fn set_up(&mut self) {
-        let mut listener = PacketPeerUdp::new_gd();
+        let addr = format!("0.0.0.0:{}", LISTEN_PORT);
 
-        let result = listener.bind(LISTEN_PORT);
-        if result == godot::global::Error::OK {
-            godot_print!("Successfully bound to port: {}", LISTEN_PORT);
-        } else {
-            godot_error!("Failed to bind to port: {}", LISTEN_PORT);
-            return;
+        match UdpSocket::bind(&addr) {
+            Ok(socket) => {
+                socket.set_nonblocking(true).unwrap();
+                socket.set_broadcast(true).unwrap();
+                godot_print!("Listening on {}", addr);
+                self.socket = Some(socket);
+            }
+            Err(e) => {
+                godot_error!("Failed to bind {}: {}", addr, e);
+            }
         }
-
-        listener.set_broadcast_enabled(true);
-
-        self.listener = listener;
     }
-
     #[func]
     fn joinby_ip(&mut self, ip: GString) {
         self.base_mut().emit_signal("join_game", &[ip.to_variant()]);
@@ -139,30 +193,25 @@ impl MultiplayerScene {
     fn d(&mut self, ip: GString) {
         let mut peer = ENetMultiplayerPeer::new_gd();
         let error = peer.create_client(&ip.to_string(), 55555);
-
         if error == godot::global::Error::OK {
             self.base_mut()
                 .get_multiplayer()
                 .unwrap()
                 .set_multiplayer_peer(&peer);
-            godot_print!("Connecting {}", ip);
             self.base_mut()
                 .get_tree()
-                .change_scene_to_file("res://World.scn");
+                .change_scene_to_file("res://world/World.scn");
         } else {
-            godot_print!("Failed to create client. Error code: {:?}", error);
+            godot_error!("Failed to create client: {:?}", error);
         }
     }
 
     #[func]
     fn on_back_pressed(&mut self) {
-        self.base_mut()
-            .get_tree()
-            .change_scene_to_file("res://SaveAndLoad/LoadMenu.scn");
-    }
-
-    #[func]
-    fn clean_up(&mut self) {
-        self.listener.close();
+        let mut tree = self.base().get_tree();
+        tree.call_deferred(
+            "change_scene_to_file",
+            &[GString::from("res://SaveAndLoad/LoadMenu.scn").to_variant()],
+        );
     }
 }

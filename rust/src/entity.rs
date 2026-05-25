@@ -16,20 +16,17 @@ pub trait Entity {
     fn is_alive(&self) -> bool;
 }
 
-#[allow(dead_code)]
 pub trait HostileBehavior: Entity {
     fn aggro(&mut self, target: Vector2);
     fn chase(&mut self, target: Vector2, speed: f32);
     fn attack(&mut self, target: &mut dyn Entity);
 }
 
-#[allow(dead_code)]
 pub trait NeutralBehavior: Entity {
     fn interact(&self) -> &'static str;
     fn become_hostile(&mut self);
 }
 
-#[allow(dead_code)]
 pub trait PassiveBehavior: Entity {
     fn wander(&mut self);
     fn flee(&mut self, from: Vector2);

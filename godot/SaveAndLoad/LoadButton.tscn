@@ -1,9 +1,9 @@
-[gd_scene load_steps=3 format=3 uid="uid://b0ne2ctjlfdqj"]
+[gd_scene format=3 uid="uid://b0ne2ctjlfdqj"]
 
 [ext_resource type="FontFile" uid="uid://b6ne2ntjnur2e" path="res://Assets/fonts/MinecraftBold-nMK1.otf" id="1_jfapj"]
 [ext_resource type="Script" uid="uid://b3xjg6bbi3mmd" path="res://SaveAndLoad/LoadButton.gd" id="1_r4u8t"]
 
-[node name="LoadButton" type="Button"]
+[node name="LoadButton" type="Button" unique_id=1501983681]
 theme_override_fonts/font = ExtResource("1_jfapj")
 text = "TEST"
 script = ExtResource("1_r4u8t")

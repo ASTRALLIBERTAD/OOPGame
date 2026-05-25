@@ -1,7 +1,7 @@
 extends TileMapLayer
 
 # Lookup table: neighbor mask → atlas coord (x,y) in tileset
-var grass_bitmask_map = {
+var _grass_bitmask_map = {
 	255: Vector2i(0, 0), # surrounded
 	2:   Vector2i(1, 0), # only top
 	8:   Vector2i(2, 0), # only left
@@ -16,7 +16,7 @@ var grass_bitmask_map = {
 }
 
 # Directions and their mask values
-var directions = {
+var _directions = {
 	Vector2i(-1, -1): 1,
 	Vector2i(0, -1): 2,
 	Vector2i(1, -1): 4,
@@ -38,12 +38,12 @@ func _ready() -> void:
 
 func _autotile(pos: Vector2i) -> void:
 	var mask := 0
-	for dir in directions.keys():
+	for dir in _directions.keys():
 		var neighbor = pos + dir
 		if _is_grass(neighbor):
-			mask |= directions[dir]
+			mask |= _directions[dir]
 	# Pick atlas coords from lookup, fallback if missing
-	var tile_coord: Vector2i = grass_bitmask_map.get(mask, Vector2i(0, 0))
+	var tile_coord: Vector2i = _grass_bitmask_map.get(mask, Vector2i(0, 0))
 	# Place tile
 	set_cell(pos, SOURCE_ID, tile_coord)
 # Dummy function: replace with your world data check

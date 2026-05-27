@@ -34,7 +34,7 @@ struct ConfigSettings {
 
 #[derive(GodotClass)]
 #[class(base = Node, init)]
-struct SaveManagerRust {
+pub struct SaveManagerRust {
     #[base]
     base: Base<Node>,
 
@@ -419,7 +419,7 @@ impl SaveManagerRust {
     }
 
     #[func]
-    fn get_config_player_name(&self) -> String {
+    pub fn get_config_player_name(&self) -> String {
         let base_path = self.get_os();
         let config_path = format!("{}/config.json", base_path);
 
@@ -433,7 +433,7 @@ impl SaveManagerRust {
     }
 
     #[func]
-    fn get_config_volume(&self) -> f32 {
+    pub fn get_config_volume(&self) -> f32 {
         let base_path = self.get_os();
         let config_path = format!("{}/config.json", base_path);
 

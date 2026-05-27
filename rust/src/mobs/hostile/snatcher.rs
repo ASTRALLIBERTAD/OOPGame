@@ -1,10 +1,10 @@
+use crate::entity::{Entity, HostileBehavior, MobState};
+use crate::rustplayer::Rustplayer;
 use godot::classes::{AnimatedSprite2D, CharacterBody2D, ICharacterBody2D};
 use godot::obj::WithBaseField;
 use godot::prelude::*;
 use godot::tools::get_autoload_by_name;
-
-use crate::entity::{Entity, HostileBehavior, MobState};
-use crate::rustplayer::Rustplayer;
+use rand::RngExt;
 
 #[derive(GodotClass)]
 #[class(base=CharacterBody2D)]
@@ -119,10 +119,22 @@ impl Entity for Snatcher {
         if !self.is_alive() {
             if self.has_stolen && self.stole_piso_successfully {
                 let steal_amount = self.steal_amount;
-                let pos = self.base_mut().get_global_position();
-                self.base_mut().emit_signal(
-                    "drop_stolen_piso",
-                    &[Variant::from(steal_amount), Variant::from(pos)],
+                let mut rng = rand::rng();
+
+                let random_x = rng.random_range(-50.0..=50.0);
+                let random_y = rng.random_range(-50.0..=50.0);
+
+                let mut pos = self.base_mut().get_global_position();
+                pos += Vector2::new(random_x, random_y);
+
+                let mut event_bus = get_autoload_by_name::<Node>("EventBus");
+                event_bus.call(
+                    "emit_signal",
+                    &[
+                        Variant::from(GString::from("piso_dropped")),
+                        Variant::from(steal_amount),
+                        Variant::from(pos),
+                    ],
                 );
             }
             self.mob_state = MobState::Dead;

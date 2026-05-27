@@ -7,6 +7,8 @@ signal piso_changed(new_total: int)
 signal civilian_killed()
 signal article_published(intel_count: int)
 signal boss_defeated()
+signal item_dropped(item_id: String, position: Vector2)
+signal piso_dropped(amount: int, position: Vector2)
 
 func _ready():
 	if false:
@@ -17,3 +19,5 @@ func _ready():
 		civilian_killed.emit()
 		article_published.emit(0)
 		boss_defeated.emit()
+		item_dropped.emit("", Vector2.ZERO)
+		piso_dropped.emit(0, Vector2.ZERO)

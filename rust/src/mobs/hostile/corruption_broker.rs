@@ -2,6 +2,7 @@ use godot::classes::{AnimatedSprite2D, CharacterBody2D, ICharacterBody2D};
 use godot::obj::WithBaseField;
 use godot::prelude::*;
 use godot::tools::get_autoload_by_name;
+use rand::RngExt;
 
 use crate::entity::{Entity, HostileBehavior, MobState};
 use crate::rustplayer::Rustplayer;
@@ -297,9 +298,22 @@ impl CorruptionBroker {
             if my_pos.distance_to(fp) < 20.0 {
                 // Escaped — drop funds at exit point and despawn.
                 let remaining = self.bribe_pool;
-                self.base_mut().emit_signal(
-                    "black_funds_dropped",
-                    &[Variant::from(fp), Variant::from(remaining)],
+                let mut rng = rand::rng();
+
+                let random_x = rng.random_range(-50.0..=50.0);
+                let random_y = rng.random_range(-50.0..=50.0);
+
+                let mut pos = self.base_mut().get_global_position();
+                pos += Vector2::new(random_x, random_y);
+
+                let mut event_bus = get_autoload_by_name::<Node>("EventBus");
+                event_bus.call(
+                    "emit_signal",
+                    &[
+                        Variant::from(GString::from("piso_dropped")),
+                        Variant::from(remaining),
+                        Variant::from(pos),
+                    ],
                 );
                 godot_print!(
                     "Trapo Fixer escaped. {} piso in black funds left behind.",
@@ -313,9 +327,14 @@ impl CorruptionBroker {
     fn on_death(&mut self) {
         let pos = self.base_mut().get_global_position();
         let remaining = self.bribe_pool;
-        self.base_mut().emit_signal(
-            "black_funds_dropped",
-            &[Variant::from(pos), Variant::from(remaining)],
+        let mut event_bus = get_autoload_by_name::<Node>("EventBus");
+        event_bus.call(
+            "emit_signal",
+            &[
+                Variant::from(GString::from("piso_dropped")),
+                Variant::from(remaining),
+                Variant::from(pos),
+            ],
         );
         godot_print!(
             "Trapo Fixer defeated. Black funds ({} piso) scattered.",

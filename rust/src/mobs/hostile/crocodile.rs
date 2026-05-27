@@ -286,8 +286,17 @@ impl Crocodile {
         self.bribe_timer += delta;
         if self.bribe_timer >= self.bribe_cooldown {
             self.bribe_timer = 0.0;
-            self.base_mut()
-                .emit_signal("bribe_offered", &[Variant::from(500_i32)]);
+            let mut event_bus = get_autoload_by_name::<Node>("EventBus");
+            let self_node = self.base().clone().upcast::<Node>();
+            event_bus.call(
+                "emit_signal",
+                &[
+                    Variant::from(GString::from("bribe_requested")),
+                    Variant::from(GString::from("boss")),
+                    Variant::from(500_i32),
+                    Variant::from(self_node),
+                ],
+            );
             godot_print!("Buwaya: 'Let us not fight. I have an offer for you.'");
         }
     }
@@ -405,12 +414,18 @@ impl Crocodile {
         }
         godot_print!("Buwaya: 'Smart choice. This is how the world works.'");
     }
-
     #[func]
     pub fn on_bribe_rejected(&mut self) {
         self.bribe_resolved = true;
         self.attack_damage += 3;
-        godot_print!("Buwaya: 'You will regret this.'");
+        let mut event_bus = get_autoload_by_name::<Node>("EventBus");
+        event_bus.call(
+            "emit_signal",
+            &[
+                Variant::from(GString::from("message")),
+                Variant::from(GString::from("Buwaya: 'You will regret this.'")),
+            ],
+        );
     }
 
     #[func]

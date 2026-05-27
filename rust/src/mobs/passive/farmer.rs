@@ -178,11 +178,10 @@ impl Farmer {
             if let Ok(body) = enemy.try_cast::<CharacterBody2D>() {
                 let epos = body.get_global_position();
                 let dist = my_pos.distance_to(epos);
-                if dist <= self.fear_radius {
-                    if nearest.map_or(true, |(d, _)| dist < d) {
+                if dist <= self.fear_radius
+                    && nearest.is_none_or(|(d, _)| dist < d) {
                         nearest = Some((dist, epos));
                     }
-                }
             }
         }
         nearest.map(|(_, pos)| pos)

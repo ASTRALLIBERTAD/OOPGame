@@ -1,6 +1,7 @@
 use godot::classes::{AnimatedSprite2D, CharacterBody2D, ICharacterBody2D};
 use godot::obj::WithBaseField;
 use godot::prelude::*;
+use godot::tools::get_autoload_by_name;
 
 use crate::entity::{Entity, HostileBehavior, MobState};
 use crate::rustplayer::Rustplayer;
@@ -127,20 +128,21 @@ impl ICharacterBody2D for CorruptionBroker {
         }
 
         // Attempt a player bribe before resorting to violence
-        if !self.player_deal_resolved && self.bribe_pool >= 100 {
-            self.player_bribe_timer += delta;
-            if self.player_bribe_timer >= PLAYER_BRIBE_COOLDOWN {
-                self.player_bribe_timer = 0.0;
-                let offer = ((self.corruption_level + 1) * 80).clamp(80, self.bribe_pool);
-                self.base_mut()
-                    .emit_signal("bribe_offered_to_player", &[Variant::from(offer)]);
-                godot_print!(
-                    "Trapo Fixer: 'Let's settle this quietly. {} piso and we forget this happened.'",
-                    offer
-                );
-            }
+        if self.player_bribe_timer >= PLAYER_BRIBE_COOLDOWN {
+            self.player_bribe_timer = 0.0;
+            let offer = ((self.corruption_level + 1) * 80).clamp(80, self.bribe_pool);
+            let mut event_bus = get_autoload_by_name::<Node>("EventBus");
+            let self_node = self.base().clone().upcast::<Node>();
+            event_bus.call(
+                "emit_signal",
+                &[
+                    Variant::from(GString::from("bribe_requested")),
+                    Variant::from(GString::from("broker")),
+                    Variant::from(offer),
+                    Variant::from(self_node),
+                ],
+            );
         }
-
         self.aggro(player_pos);
         self.chase(player_pos, self.speed);
 

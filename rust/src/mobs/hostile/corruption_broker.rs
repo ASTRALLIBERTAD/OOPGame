@@ -81,7 +81,7 @@ impl ICharacterBody2D for CorruptionBroker {
             mob_state: MobState::Idle,
             can_slash: true,
             slash_timer: 0.0,
-            player_bribe_timer: 0.0,
+            player_bribe_timer: PLAYER_BRIBE_COOLDOWN,
             mob_buff_timer: 0.0,
             player_deal_resolved: false,
             flee_target: None,
@@ -128,21 +128,23 @@ impl ICharacterBody2D for CorruptionBroker {
             return;
         }
 
-        // Attempt a player bribe before resorting to violence
-        if self.player_bribe_timer >= PLAYER_BRIBE_COOLDOWN {
-            self.player_bribe_timer = 0.0;
-            let offer = ((self.corruption_level + 1) * 80).clamp(80, self.bribe_pool);
-            let mut event_bus = get_autoload_by_name::<Node>("EventBus");
-            let self_node = self.base().clone().upcast::<Node>();
-            event_bus.call(
-                "emit_signal",
-                &[
-                    Variant::from(GString::from("bribe_requested")),
-                    Variant::from(GString::from("broker")),
-                    Variant::from(offer),
-                    Variant::from(self_node),
-                ],
-            );
+        if !self.player_deal_resolved && self.bribe_pool >= 80 {
+            self.player_bribe_timer += delta;
+            if self.player_bribe_timer >= PLAYER_BRIBE_COOLDOWN {
+                self.player_bribe_timer = 0.0;
+                let offer = ((self.corruption_level + 1) * 80).clamp(80, self.bribe_pool);
+                let mut event_bus = get_autoload_by_name::<Node>("EventBus");
+                let self_node = self.base().clone().upcast::<Node>();
+                event_bus.call(
+                    "emit_signal",
+                    &[
+                        Variant::from(GString::from("bribe_requested")),
+                        Variant::from(GString::from("broker")),
+                        Variant::from(offer),
+                        Variant::from(self_node),
+                    ],
+                );
+            }
         }
         self.aggro(player_pos);
         self.chase(player_pos, self.speed);
@@ -203,15 +205,6 @@ impl HostileBehavior for CorruptionBroker {
 
 #[godot_api]
 impl CorruptionBroker {
-    #[signal]
-    fn bribe_offered_to_player(amount: i32);
-
-    #[signal]
-    fn mob_buffed(position: Vector2, count: i32);
-
-    #[signal]
-    fn black_funds_dropped(position: Vector2, amount: i32);
-
     fn tick_attack_cooldown(&mut self, delta: f64) {
         if !self.can_slash {
             self.slash_timer += delta;
@@ -325,20 +318,30 @@ impl CorruptionBroker {
     }
 
     fn on_death(&mut self) {
-        let pos = self.base_mut().get_global_position();
+        let mut rng = rand::rng();
+        let base_pos = self.base_mut().get_global_position();
         let remaining = self.bribe_pool;
+        let drops = rng.random_range(2..=4);
+        let per_drop = (remaining / drops).max(1);
         let mut event_bus = get_autoload_by_name::<Node>("EventBus");
-        event_bus.call(
-            "emit_signal",
-            &[
-                Variant::from(GString::from("piso_dropped")),
-                Variant::from(remaining),
-                Variant::from(pos),
-            ],
-        );
+
+        for _ in 0..drops {
+            let random_x: f32 = rng.random_range(-60.0..=60.0);
+            let random_y: f32 = rng.random_range(-60.0..=60.0);
+            let pos = base_pos + Vector2::new(random_x, random_y);
+            event_bus.call(
+                "emit_signal",
+                &[
+                    Variant::from(GString::from("piso_dropped")),
+                    Variant::from(per_drop),
+                    Variant::from(pos),
+                ],
+            );
+        }
         godot_print!(
-            "Trapo Fixer defeated. Black funds ({} piso) scattered.",
-            remaining
+            "Trapo Fixer defeated. Black funds ({} piso) scattered in {} drops.",
+            remaining,
+            drops
         );
     }
 

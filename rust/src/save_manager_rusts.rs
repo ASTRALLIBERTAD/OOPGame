@@ -2,11 +2,32 @@ use std::env::consts::OS;
 
 use crate::node_manager::NodeManager;
 use crate::rustplayer::Rustplayer;
+use chacha20poly1305::aead::{Aead, KeyInit};
+use chacha20poly1305::{ChaCha20Poly1305, Key, Nonce};
 use godot::classes::file_access::ModeFlags;
 use godot::classes::{DirAccess, FileAccess, Node, Time};
 use godot::prelude::*;
 use godot::tools::get_autoload_by_name;
+use redb::{Database, ReadableDatabase, TableDefinition};
 use serde::{Deserialize, Serialize};
+
+const PLAYER_TABLE: TableDefinition<&str, &[u8]> = TableDefinition::new("player_data");
+const CONFIG_TABLE: TableDefinition<&str, &[u8]> = TableDefinition::new("config_data");
+
+const CIPHER_KEY: &[u8; 32] = b"archipelago-chronicles-key-32byt";
+const NONCE_BYTES: &[u8; 12] = b"ac-nonce-12b";
+
+fn encrypt(plain: &[u8]) -> Result<Vec<u8>, chacha20poly1305::aead::Error> {
+    let cipher = ChaCha20Poly1305::new(Key::from_slice(CIPHER_KEY));
+    let nonce = Nonce::from_slice(NONCE_BYTES);
+    cipher.encrypt(nonce, plain)
+}
+
+fn decrypt(cipher_text: &[u8]) -> Result<Vec<u8>, chacha20poly1305::aead::Error> {
+    let cipher = ChaCha20Poly1305::new(Key::from_slice(CIPHER_KEY));
+    let nonce = Nonce::from_slice(NONCE_BYTES);
+    cipher.decrypt(nonce, cipher_text)
+}
 
 #[derive(Serialize, Deserialize)]
 struct PlayerData {
@@ -48,52 +69,201 @@ struct SaveManagerRust {
     player_health: i32,
 }
 
+impl SaveManagerRust {
+    fn base_path(&self) -> String {
+        let baser: &str = match OS {
+            "windows" => {
+                godot_print!("windows");
+                "user://"
+            }
+            "android" => {
+                godot_print!("android");
+                "/storage/emulated/0/Android/data/com.oopgame.project/files/"
+            }
+            _ => {
+                godot_print!("linux");
+                "user://"
+            }
+        };
+        godot_print!("{}", baser);
+        baser.to_string()
+    }
+
+    fn open_db(&self, world_name: &str) -> Option<Database> {
+        let base = self.base_path();
+        let games_dir = format!("{}/games", base);
+        let world_dir = format!("{}/games/{}", base, world_name);
+        let db_vpath = format!("{}/world.db", world_dir);
+
+        if let Some(mut dir) = DirAccess::open(&base) {
+            if !dir.dir_exists("games") {
+                dir.make_dir("games");
+            }
+        }
+        if let Some(mut dir) = DirAccess::open(&games_dir) {
+            if !dir.dir_exists(world_name) {
+                dir.make_dir(world_name);
+            }
+        }
+        if let Some(mut dir) = DirAccess::open(&world_dir) {
+            if !dir.dir_exists("chunk") {
+                dir.make_dir("chunk");
+            }
+        }
+
+        let db_path = godot::classes::ProjectSettings::singleton()
+            .globalize_path(&db_vpath)
+            .to_string();
+
+        match Database::create(&db_path) {
+            Ok(db) => Some(db),
+            Err(e) => {
+                godot_error!("Failed to open/create redb at {}: {}", db_path, e);
+                None
+            }
+        }
+    }
+
+    fn get_player(&mut self) -> Option<Gd<Rustplayer>> {
+        self.base_mut()
+            .get_tree()
+            .get_nodes_in_group("player")
+            .iter_shared()
+            .find_map(|node| node.try_cast::<Rustplayer>().ok())
+    }
+
+    fn write_encrypted<T: Serialize>(
+        db: &Database,
+        table_def: TableDefinition<&str, &[u8]>,
+        key: &str,
+        value: &T,
+    ) -> bool {
+        let raw = match bincode::serialize(value) {
+            Ok(v) => v,
+            Err(e) => {
+                godot_error!("bincode serialise failed: {}", e);
+                return false;
+            }
+        };
+
+        let encrypted = match encrypt(&raw) {
+            Ok(v) => v,
+            Err(e) => {
+                godot_error!("encryption failed: {}", e);
+                return false;
+            }
+        };
+
+        let write_txn = match db.begin_write() {
+            Ok(t) => t,
+            Err(e) => {
+                godot_error!("redb write txn failed: {}", e);
+                return false;
+            }
+        };
+
+        {
+            let mut table = match write_txn.open_table(table_def) {
+                Ok(t) => t,
+                Err(e) => {
+                    godot_error!("redb open table failed: {}", e);
+                    return false;
+                }
+            };
+            if let Err(e) = table.insert(key, encrypted.as_slice()) {
+                godot_error!("redb insert failed: {}", e);
+                return false;
+            };
+        }
+
+        if let Err(e) = write_txn.commit() {
+            godot_error!("redb commit failed: {}", e);
+            return false;
+        }
+
+        true
+    }
+
+    fn read_encrypted<T: for<'de> Deserialize<'de>>(
+        db: &Database,
+        table_def: TableDefinition<&str, &[u8]>,
+        key: &str,
+    ) -> Option<T> {
+        let read_txn = match db.begin_read() {
+            Ok(t) => t,
+            Err(e) => {
+                godot_error!("redb read txn failed: {}", e);
+                return None;
+            }
+        };
+
+        let table = match read_txn.open_table(table_def) {
+            Ok(t) => t,
+            Err(e) => {
+                godot_error!("redb open table (read) failed: {}", e);
+                return None;
+            }
+        };
+
+        let guard = match table.get(key) {
+            Ok(Some(v)) => v,
+            Ok(None) => {
+                godot_error!("redb key '{}' not found", key);
+                return None;
+            }
+            Err(e) => {
+                godot_error!("redb get failed: {}", e);
+                return None;
+            }
+        };
+
+        let decrypted = match decrypt(guard.value()) {
+            Ok(v) => v,
+            Err(e) => {
+                godot_error!("decryption failed: {}", e);
+                return None;
+            }
+        };
+
+        match bincode::deserialize::<T>(&decrypted) {
+            Ok(v) => Some(v),
+            Err(e) => {
+                godot_error!("bincode deserialise failed: {}", e);
+                None
+            }
+        }
+    }
+
+    fn real_path(&self, vpath: &str) -> String {
+        godot::classes::ProjectSettings::singleton()
+            .globalize_path(vpath)
+            .to_string()
+    }
+
+    fn read_config(&self) -> Option<ConfigSettings> {
+        let db_path = self.real_path(&format!("{}/config.db", self.base_path()));
+        let db = match Database::open(&db_path) {
+            Ok(d) => d,
+            Err(e) => {
+                godot_error!("Failed to open config.db for reading: {}", e);
+                return None;
+            }
+        };
+        Self::read_encrypted::<ConfigSettings>(&db, CONFIG_TABLE, "config")
+    }
+}
+
 #[godot_api]
 impl SaveManagerRust {
     #[func]
     fn get_os(&self) -> String {
-        let mut baser: &str = "";
-        if OS == "windows" {
-            baser = "user://";
-            godot_print!("windows");
-        } else if OS == "android" {
-            baser = "/storage/emulated/0/Android/data/com.oopgame.project/files/";
-            godot_print!("android");
-        } else if OS == "linux" {
-            baser = "user://";
-            godot_print!("linux");
-        }
-        godot_print!("{}", baser);
-        (&baser).to_string()
+        self.base_path()
     }
 
     #[func]
     fn save_game_rust(&mut self, name: String) {
         self.current_world_name = StringName::from(&name);
-
-        let base_path = &self.get_os();
-        let folder = "games";
-        let file_saver = format!("{}/{}", base_path, folder);
-        let games_path = format!("{}/{}/{}", base_path, folder, name);
-
-        let mut dir = DirAccess::open(base_path).expect("ok");
-
-        if !dir.dir_exists(folder) {
-            dir.make_dir(folder);
-        }
-
-        dir = DirAccess::open(&file_saver).expect("failed to open /games");
-
-        if !dir.dir_exists(&name) {
-            dir.make_dir(&name);
-        }
-
-        dir = DirAccess::open(&games_path).expect("failed to open world dir");
-
-        if !dir.dir_exists("chunk") {
-            dir.make_dir("chunk");
-        }
-
+        let _ = self.open_db(&name);
         self.set_player_health(20);
     }
 
@@ -102,56 +272,38 @@ impl SaveManagerRust {
         self.current_world_name = StringName::from(&name);
         godot_print!("Current world name: {}", self.current_world_name);
 
-        let base_path = self.get_os();
-        let folder = "games";
-        let save_path = format!("{}/{}/{}/{}.dat", base_path, folder, name, name);
+        let Some(mut player) = self.get_player() else {
+            godot_error!("No player found, skipping save");
+            return;
+        };
+        let position = player.get_global_position();
+        let player_data = PlayerData {
+            position_x: position.x,
+            position_y: position.y,
+            health: player.bind_mut().get_health(),
+        };
+        godot_print!("Saving health: {}", player_data.health);
 
-        match FileAccess::open(&save_path, ModeFlags::WRITE) {
-            Some(mut file) => {
-                let Some(mut player) = self.get_player() else {
-                    godot_error!("No player found, skipping save");
-                    return;
-                };
-                let position = player.get_global_position();
-                let player_position = PlayerData {
-                    position_x: position.x,
-                    position_y: position.y,
-                    health: player.bind_mut().get_health(),
-                };
-
-                match bincode::serialize(&player_position) {
-                    Ok(serialized_data) => {
-                        if serialized_data.len() <= 1048576 {
-                            let byte_array = PackedByteArray::from(serialized_data);
-                            file.store_buffer(&byte_array);
-                            godot_print!("Game saved successfully at {}", save_path);
-                            godot_print!("Game saved health {}", player_position.health);
-                        } else {
-                            godot_error!("Serialized data exceeds the size limit!");
-                        }
-                    }
-                    Err(e) => {
-                        godot_error!("Failed to serialize player position: {}", e);
-                    }
-                }
-            }
-            None => {
-                godot_error!("Failed to open save file at {}", save_path);
-            }
+        let Some(db) = self.open_db(&name) else {
+            return;
+        };
+        if Self::write_encrypted(&db, PLAYER_TABLE, &name, &player_data) {
+            godot_print!("Player data saved to redb (world: {})", name);
         }
 
         let mut autoload = get_autoload_by_name::<NodeManager>("GlobalNodeManager");
-
         let world = autoload.bind_mut().get_world();
-
         let mut terrain = autoload.bind_mut().get_terrain();
-
         let mut terrain_ref = terrain.bind_mut();
 
         let player_name = world.bind().player_node_names.clone();
         terrain_ref.set_player_node_names(player_name);
 
-        let path = format!("{}/games/{}/chunk", self.get_os(), self.current_world_name);
+        let path = format!(
+            "{}/games/{}/chunk",
+            self.base_path(),
+            self.current_world_name
+        );
         terrain_ref.set_path(path);
 
         let dirty_chunks: Vec<_> = terrain_ref
@@ -168,58 +320,39 @@ impl SaveManagerRust {
     #[func]
     fn load_player_pos(&mut self, name: String) {
         let mut autoload = get_autoload_by_name::<NodeManager>("GlobalNodeManager");
-
         let world = autoload.bind_mut().get_world();
-
         let mut binding = autoload.bind_mut().get_terrain();
         let mut terrain_ref = binding.bind_mut();
 
         let player_name = world.bind().player_node_names.clone();
         terrain_ref.set_player_node_names(player_name);
 
-        let path = format!("{}/games/{}/chunk", self.get_os(), self.current_world_name);
+        let path = format!(
+            "{}/games/{}/chunk",
+            self.base_path(),
+            self.current_world_name
+        );
         terrain_ref.set_path(path);
 
-        let base_path = self.get_os();
-        let folder = "games";
-        let save_path = format!("{}/{}/{}/{}.dat", base_path, folder, name, name);
-        let file = FileAccess::open(&save_path, ModeFlags::READ);
+        let Some(db) = self.open_db(&name) else {
+            return;
+        };
 
-        if let Some(mut file_acss) = file {
-            let file_length = file_acss.get_length();
-            let data = file_acss.get_buffer(file_length as i64);
+        let Some(player_data) = Self::read_encrypted::<PlayerData>(&db, PLAYER_TABLE, &name) else {
+            godot_error!("Failed to load player data from redb (world: {})", name);
+            return;
+        };
 
-            let data_slice: &[u8] = data.as_slice();
+        let Some(mut player) = self.get_player() else {
+            godot_error!("No player found, skipping load");
+            return;
+        };
 
-            match bincode::deserialize::<PlayerData>(data_slice) {
-                Ok(player_data) => {
-                    let Some(mut player) = self.get_player() else {
-                        godot_error!("No player found, skipping load");
-                        return;
-                    };
-                    player.set_global_position(Vector2::new(
-                        player_data.position_x,
-                        player_data.position_y,
-                    ));
-                    player.bind_mut().set_health(player_data.health);
-                    godot_print!("Player position loaded successfully from {}", save_path);
-                    godot_print!("saved heart {}", player_data.health);
-                }
-                Err(_) => {
-                    godot_error!("Failed to deserialize player position from file");
-                }
-            }
-        } else {
-            godot_error!("Failed to open file for loading at {}", save_path);
-        }
-    }
+        player.set_global_position(Vector2::new(player_data.position_x, player_data.position_y));
+        player.bind_mut().set_health(player_data.health);
 
-    fn get_player(&mut self) -> Option<Gd<Rustplayer>> {
-        self.base_mut()
-            .get_tree()
-            .get_nodes_in_group("player")
-            .iter_shared()
-            .find_map(|node| node.try_cast::<Rustplayer>().ok())
+        godot_print!("Player position loaded (world: {})", name);
+        godot_print!("Loaded health: {}", player_data.health);
     }
 
     #[func]
@@ -233,7 +366,12 @@ impl SaveManagerRust {
         let world_name = self.current_world_name.clone();
         self.save_player_pos(world_name.to_string());
         godot_print!("world name is: {}", world_name);
-        let path = format!("{}/games/{}/{}.png", self.get_os(), world_name, world_name);
+        let path = format!(
+            "{}/games/{}/{}.png",
+            self.base_path(),
+            world_name,
+            world_name
+        );
         let screen_capture = self
             .base_mut()
             .get_viewport()
@@ -258,7 +396,7 @@ impl SaveManagerRust {
 
     #[func]
     fn delete_save(&mut self, name: String) {
-        let base_path = self.get_os();
+        let base_path = self.base_path();
         let folder = "games";
         let save_path = format!("{}/{}/{}", base_path, folder, name);
 
@@ -280,19 +418,15 @@ impl SaveManagerRust {
     fn delete_directory_recursive(&self, path: &str) -> bool {
         if let Some(mut dir) = godot::classes::DirAccess::open(path) {
             dir.list_dir_begin();
-
             loop {
                 let entry = dir.get_next();
                 if entry.is_empty() {
                     break;
                 }
-
                 if entry == "." || entry == ".." {
                     continue;
                 }
-
                 let full_path = format!("{}/{}", path, entry);
-
                 if dir.current_is_dir() {
                     if !self.delete_directory_recursive(&full_path) {
                         return false;
@@ -301,7 +435,6 @@ impl SaveManagerRust {
                     dir.remove(&full_path);
                 }
             }
-
             dir.list_dir_end();
 
             if let Some(mut parent) = godot::classes::DirAccess::open(
@@ -322,11 +455,10 @@ impl SaveManagerRust {
     #[func]
     fn save_world(&mut self) {
         let time = Time::singleton();
-
         let folder = "games";
         let save_path = format!(
             "{}/{}/{}/{}_saveGame.json",
-            self.get_os(),
+            self.base_path(),
             folder,
             self.current_world_name,
             self.current_world_name
@@ -338,29 +470,57 @@ impl SaveManagerRust {
                     date_time: time.get_unix_time_from_system(),
                     img_path: format!(
                         "{}/games/{}/{}.png",
-                        self.get_os(),
+                        self.base_path(),
                         self.current_world_name,
                         self.current_world_name
                     ),
                     name: self.current_world_name.to_string(),
                     seed: self.world_seed,
                 };
-
                 match serde_json::to_string(&info) {
                     Ok(json_string) => {
                         file.store_string(&json_string);
                         self.rust_screenshot();
-                        godot_print!("Game info saved successfully at {}", save_path);
+                        godot_print!("Game info saved at {}", save_path);
                     }
-                    Err(e) => {
-                        godot_error!("Failed to serialize game info: {}", e);
-                    }
+                    Err(e) => godot_error!("Failed to serialise game info: {}", e),
                 }
             }
-            None => {
-                godot_error!("Failed to open save file at {}", save_path);
-            }
+            None => godot_error!("Failed to open save file at {}", save_path),
         }
+    }
+
+    #[func]
+    fn save_config_json(&self, player_name: String, volume: f32) {
+        let db_path = self.real_path(&format!("{}/config.db", self.base_path()));
+        let settings = ConfigSettings {
+            player_name,
+            volume,
+        };
+
+        let db = match Database::create(&db_path) {
+            Ok(d) => d,
+            Err(e) => {
+                godot_error!("Failed to open config.db: {}", e);
+                return;
+            }
+        };
+
+        if Self::write_encrypted(&db, CONFIG_TABLE, "config", &settings) {
+            godot_print!("Config saved to {}", db_path);
+        }
+    }
+
+    #[func]
+    fn get_config_player_name(&self) -> String {
+        self.read_config()
+            .map(|s| s.player_name)
+            .unwrap_or_else(|| "ASTRAL".to_string())
+    }
+
+    #[func]
+    fn get_config_volume(&self) -> f32 {
+        self.read_config().map(|s| s.volume).unwrap_or(50.0)
     }
 
     #[func]
@@ -390,59 +550,5 @@ impl SaveManagerRust {
     #[func]
     fn get_seed(&self) -> i32 {
         self.world_seed
-    }
-
-    #[func]
-    fn save_config_json(&self, player_name: String, volume: f32) {
-        let base_path = self.get_os();
-        let config_path = format!("{}/config.json", base_path);
-
-        let settings = ConfigSettings {
-            player_name,
-            volume,
-        };
-
-        match FileAccess::open(&config_path, ModeFlags::WRITE) {
-            Some(mut file) => match serde_json::to_string(&settings) {
-                Ok(json_string) => {
-                    file.store_string(&json_string);
-                    godot_print!("Config settings saved successfully at {}", config_path);
-                }
-                Err(e) => {
-                    godot_error!("Failed to serialize config json: {}", e);
-                }
-            },
-            None => {
-                godot_error!("Failed to create config file at {}", config_path);
-            }
-        }
-    }
-
-    #[func]
-    fn get_config_player_name(&self) -> String {
-        let base_path = self.get_os();
-        let config_path = format!("{}/config.json", base_path);
-
-        if let Some(file) = FileAccess::open(&config_path, ModeFlags::READ) {
-            let json_string = file.get_as_text().to_string();
-            if let Ok(settings) = serde_json::from_str::<ConfigSettings>(&json_string) {
-                return settings.player_name;
-            }
-        }
-        "ASTRAL".to_string()
-    }
-
-    #[func]
-    fn get_config_volume(&self) -> f32 {
-        let base_path = self.get_os();
-        let config_path = format!("{}/config.json", base_path);
-
-        if let Some(file) = FileAccess::open(&config_path, ModeFlags::READ) {
-            let json_string = file.get_as_text().to_string();
-            if let Ok(settings) = serde_json::from_str::<ConfigSettings>(&json_string) {
-                return settings.volume;
-            }
-        }
-        50.0 // Default fallback value
     }
 }

@@ -4,11 +4,18 @@ signal message(text: String)
 signal bribe_requested(bribe_type: String, amount: int, mob: Node)
 signal bribe_resolved(accepted: bool)
 signal piso_changed(new_total: int)
-signal civilian_killed()
+
 signal article_published(intel_count: int)
 signal boss_defeated()
 signal item_dropped(item_id: String, position: Vector2)
 signal piso_dropped(amount: int, position: Vector2)
+
+signal food_ready(position: Vector2)
+signal enemy_killed_near_farmer(farmer)
+signal civilian_killed()
+
+signal balikbayan_box_dropped(position: Vector2)
+
 
 func _ready():
 	if false:
@@ -21,3 +28,9 @@ func _ready():
 		boss_defeated.emit()
 		item_dropped.emit("", Vector2.ZERO)
 		piso_dropped.emit(0, Vector2.ZERO)
+		
+		food_ready.emit(Vector2.ZERO)
+		enemy_killed_near_farmer.emit(null)
+		civilian_killed.emit()
+		
+		balikbayan_box_dropped.emit(Vector2.ZERO)

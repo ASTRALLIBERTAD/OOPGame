@@ -86,6 +86,8 @@ pub struct Rustplayer {
     arrested_timer: f64,
 
     piso: i32,
+
+    in_sanctuary: bool,
 }
 
 #[godot_api]
@@ -123,6 +125,8 @@ impl ICharacterBody2D for Rustplayer {
             arrested_timer: 0.0,
 
             piso: 200,
+
+            in_sanctuary: false,
         }
     }
 
@@ -246,12 +250,17 @@ impl Entity for Rustplayer {
         if !self.is_alive() {
             return;
         }
+        if self.in_sanctuary {
+            godot_print!("Sanctuary protects the player!");
+            return;
+        }
         self.health = (self.health - amount).max(0);
         self.heart_ui.bind_mut().set_heart_display(self.health);
         if !self.is_alive() {
             godot_print!("player dead");
         }
     }
+
     fn heal(&mut self, amount: i32) {
         self.health = (self.health + amount).clamp(0, MAX_HEALTH);
         self.heart_ui.bind_mut().set_heart_display(self.health);
@@ -540,6 +549,16 @@ impl Rustplayer {
 
 #[godot_api(secondary)]
 impl Rustplayer {
+    #[func]
+    pub fn set_in_sanctuary(&mut self, value: bool) {
+        self.in_sanctuary = value;
+    }
+
+    #[func]
+    pub fn is_in_sanctuary(&self) -> bool {
+        self.in_sanctuary
+    }
+
     #[func]
     pub fn get_piso(&self) -> i32 {
         self.piso

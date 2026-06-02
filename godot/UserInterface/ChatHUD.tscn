@@ -3,6 +3,7 @@
 [ext_resource type="Script" uid="uid://cmf4cn3soj624" path="res://UserInterface/ChatHUD.gd" id="1_5c75u"]
 
 [node name="ChatHUD" type="Control" unique_id=1054478146]
+custom_minimum_size = Vector2(400, 0)
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0

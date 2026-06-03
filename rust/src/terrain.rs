@@ -121,6 +121,7 @@ pub struct Terrain1 {
     chunks_unloaded_this_frame: usize,
     chunks_saved_this_frame: usize,
     all_players_chunks: HashSet<Vector2i>, // Shared chunk tracking
+    corruption_tiles: HashSet<Vector2i>,
 }
 
 #[godot_api]
@@ -147,11 +148,12 @@ impl ITileMapLayer for Terrain1 {
             chunks_unloaded_this_frame: 0,
             chunks_saved_this_frame: 0,
             all_players_chunks: HashSet::new(),
+            corruption_tiles: HashSet::new(),
         }
     }
 
     fn enter_tree(&mut self) {
-        let callable = self.base_mut().callable("sync_seed");
+        let callable = self.to_gd().callable("sync_seed");
         let mut main = self.base_mut().get_node_as::<MainNode>("/root/main");
         main.connect("seed_requested", &callable);
     }
@@ -199,23 +201,27 @@ impl ITileMapLayer for Terrain1 {
         if event.is_action_pressed("click") {
             let k = self.base_mut().get_global_mouse_position();
             let l = self.base_mut().local_to_map(k);
-            let coords = Vector2i::new(1, 0);
 
-            self.base_mut()
-                .set_cell_ex(l)
-                .source_id(1)
-                .atlas_coords(coords)
-                .done();
+            if self.corruption_tiles.contains(&l) {
+                self.cleanse_corruption_tile(l);
+            } else {
+                let coords = Vector2i::new(1, 0);
+                self.base_mut()
+                    .set_cell_ex(l)
+                    .source_id(1)
+                    .atlas_coords(coords)
+                    .done();
 
-            let chunk_pos = Self::get_chunk_coord_static(l);
-            let entry = self
-                .chunk_cache
-                .entry(chunk_pos)
-                .or_insert_with(ChunkData::new);
+                let chunk_pos = Self::get_chunk_coord_static(l);
+                let entry = self
+                    .chunk_cache
+                    .entry(chunk_pos)
+                    .or_insert_with(ChunkData::new);
 
-            let lx = l.x.rem_euclid(CHUNK_SIZE) as usize;
-            let ly = l.y.rem_euclid(CHUNK_SIZE) as usize;
-            entry.set(lx, ly, coords.into());
+                let lx = l.x.rem_euclid(CHUNK_SIZE) as usize;
+                let ly = l.y.rem_euclid(CHUNK_SIZE) as usize;
+                entry.set(lx, ly, coords.into());
+            }
         }
     }
 }
@@ -681,10 +687,71 @@ impl Terrain1 {
 
     #[func]
     fn set_aggressive_performance_mode(&mut self) {
-        self.max_cached_chunks = 200; // Very aggressive
+        self.max_cached_chunks = 200;
         godot_print!(
             "Aggressive performance mode enabled: Chunks will load slower but FPS should improve"
         );
+    }
+
+    #[func]
+    pub fn spawn_corruption_tile(&mut self, tile_pos: Vector2i) {
+        let corruption_coords = Vector2i::new(2, 0);
+        self.base_mut()
+            .set_cell_ex(tile_pos)
+            .source_id(1)
+            .atlas_coords(corruption_coords)
+            .done();
+
+        let chunk_pos = Self::get_chunk_coord_static(tile_pos);
+        let entry = self
+            .chunk_cache
+            .entry(chunk_pos)
+            .or_insert_with(ChunkData::new);
+        let lx = tile_pos.x.rem_euclid(CHUNK_SIZE) as usize;
+        let ly = tile_pos.y.rem_euclid(CHUNK_SIZE) as usize;
+        entry.set(lx, ly, corruption_coords.into());
+
+        self.corruption_tiles.insert(tile_pos);
+        godot_print!(
+            "Corruption tile spawned at ({}, {})",
+            tile_pos.x,
+            tile_pos.y
+        );
+    }
+
+    #[func]
+    pub fn cleanse_corruption_tile(&mut self, tile_pos: Vector2i) {
+        if !self.corruption_tiles.contains(&tile_pos) {
+            return;
+        }
+
+        let clean_coords = Vector2i::new(1, 0);
+        self.base_mut()
+            .set_cell_ex(tile_pos)
+            .source_id(1)
+            .atlas_coords(clean_coords)
+            .done();
+
+        let chunk_pos = Self::get_chunk_coord_static(tile_pos);
+        let entry = self
+            .chunk_cache
+            .entry(chunk_pos)
+            .or_insert_with(ChunkData::new);
+        let lx = tile_pos.x.rem_euclid(CHUNK_SIZE) as usize;
+        let ly = tile_pos.y.rem_euclid(CHUNK_SIZE) as usize;
+        entry.set(lx, ly, clean_coords.into());
+
+        self.corruption_tiles.remove(&tile_pos);
+        godot_print!(
+            "Corruption tile cleansed at ({}, {})",
+            tile_pos.x,
+            tile_pos.y
+        );
+    }
+
+    #[func]
+    pub fn get_corruption_tile_count(&self) -> i32 {
+        self.corruption_tiles.len() as i32
     }
 
     #[func]

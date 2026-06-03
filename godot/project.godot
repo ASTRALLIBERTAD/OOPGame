@@ -8,9 +8,7 @@
 
 config_version=5
 
-[animation]
-
-compatibility/default_parent_skeleton_in_mesh_instance_3d=true
+first_run_done=true
 
 [application]
 
@@ -26,6 +24,7 @@ config/icon="res://Assets/PixelUIButtons/PlayButton.png"
 
 RustSaveManager1="*res://SaveAndLoad/save_manager_rust.scn"
 GlobalNodeManager="*res://autoloads/NodeManager.tscn"
+EventBus="*uid://uto40usis8fy"
 
 [display]
 
@@ -34,6 +33,7 @@ window/size/initial_position_type=0
 window/stretch/mode="canvas_items"
 window/stretch/aspect="ignore"
 window/per_pixel_transparency/allowed=true
+display_server/driver.linuxbsd="wayland"
 
 [global_group]
 

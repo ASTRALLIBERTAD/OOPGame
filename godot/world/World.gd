@@ -1,9 +1,9 @@
 extends Node2dRust
 
 @onready var scene = get_tree()
-var peer = ENetMultiplayerPeer.new()
+var peer: ENetMultiplayerPeer
 @onready var terrain = $"../Terrain/Terrain1"
-@onready var debug_label = $TouchControl/TouchControls/Label # Optional: for displaying stats
+@onready var debug_label = $PauseMenu/CanvasLayer/Label # Optional: for displaying stats
 
 var update_interval = 0.5
 var time_passed = 0.0
@@ -65,67 +65,84 @@ func add_player(pid):
 
 func _on_auto_save_timeout() -> void:
 	RustSaveManager1.auto_save()
-	pass 
 
 
 func _on_saving_time_timeout() -> void:
 	get_tree().paused = false
-	RustSaveManager1.set_player_health(0)
+	
 	RustSaveManager1.rust_screenshot()
 	scene.change_scene_to_file("res://SaveAndLoad/LoadMenu.scn")
 	queue_redraw()
 	queue_free()
 
 func _on_menu_pressed() -> void:
-	%TouchControls.visible = false
+	var player_menus = %PLAYERS.get_node("Control/CanvasLayer") as CanvasLayer 
+	player_menus.visible = false
+	var player_control = %PLAYERS.get_node("Control/TouchControls") as CanvasLayer
+	player_control.visible = false
 	get_tree().paused = true
 	%Panel.visible = true
-	pass # Replace with function body.
 
 func _on_save_pressed() -> void:
-	%TouchControls.visible = false
+	var player_menus = %PLAYERS.get_node("Control/CanvasLayer") as CanvasLayer 
+	player_menus.visible = false
+	var player_control = %PLAYERS.get_node("Control/TouchControls") as CanvasLayer 
+	player_control.visible = false
 	%Panel.visible = false
 	%CanvasLayer.visible = false
+	$AutoSaveTimer.stop() 
 	terrain.flush_all_queues()
 	%SavingTime.start()
-	pass # Replace with function body.
+
 
 func _on_back_pressed() -> void:
-	%TouchControls.visible = true
+	var player_menus = %PLAYERS.get_node("Control/CanvasLayer") as CanvasLayer 
+	player_menus.visible = true
+	var player_control = %PLAYERS.get_node("Control/TouchControls") as CanvasLayer 
+	player_control.visible = true
 	%Panel.visible = false
 	get_tree().paused = false
-	pass # Replace with function body.
 
 
 func _on_host_pressed() -> void:
-	peer.create_server(5555, 3)
+	if multiplayer.has_multiplayer_peer():
+		multiplayer.multiplayer_peer = null
+	
+	for conn in multiplayer.peer_connected.get_connections():
+		multiplayer.peer_connected.disconnect(conn.callable)
+	
+	for conn in multiplayer.peer_disconnected.get_connections():
+		multiplayer.peer_disconnected.disconnect(conn.callable)
+	
+	peer = ENetMultiplayerPeer.new()
+	var err = peer.create_server(5555, 3)
+	if err != OK:
+		push_error("Failed to create server: %s" % err)
+		return
+	
 	multiplayer.multiplayer_peer = peer
 	%World.broadcast()
 	$Broadcaster.start()
-	RoomInfo.name = RustSaveManager1.load_game
+	
+	RoomInfo.name = RustSaveManager1.get_current_world_name()
+	
 	var id = multiplayer.get_unique_id()
 	$PLAYERS.set_multiplayer_authority(id)
 	
-	
-	multiplayer.peer_connected.connect(
-	func(pid):
+	multiplayer.peer_connected.connect(func(pid):
 		print(pid)
 		var seeds = terrain.world_seed
 		$"..".rpc("seed", seeds)
-		
 		rpc("add_player", pid)
-		
 		player_node_names.append(str(pid))
-	
-		)
-	multiplayer.peer_disconnected.connect(
-		func(pid):
-			print(pid)
-			get_node(str(pid)).queue_free()
-			player_node_names.erase(str(pid))
 	)
 	
-	pass # Replace with function body.
+	multiplayer.peer_disconnected.connect(func(pid):
+		print(pid)
+		get_node(str(pid)).queue_free()
+		player_node_names.erase(str(pid))
+	)
+
 var udp : PacketPeerUDP
 var listner: PacketPeerUDP
 @export var broadcastPort: int = 8912
@@ -136,7 +153,6 @@ func _on_broadcaster_timeout() -> void:
 	var packet = data.to_ascii_buffer()
 	%World.broadcaster_timeout(packet)
 	print(packet)
-	pass # Replace with function body.
 
 func cleanUp():
 	$Broadcaster.stop()

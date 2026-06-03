@@ -21,3 +21,10 @@ func player():
 
 #func _enter_tree() -> void:
 	#SaveManager.player_node = self
+
+func _on_piso_changed(new_total: int) -> void:
+	%piso.text = "Piso: " + str(new_total)
+
+
+func _on_message(message: String) -> void:
+	%ChatHUD.add_message(message)

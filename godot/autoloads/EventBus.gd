@@ -16,6 +16,9 @@ signal civilian_killed()
 
 signal balikbayan_box_dropped(position: Vector2)
 
+signal trade_requested(markup: float, trader: Node)
+
+signal press_blackout(duration: float)
 
 func _ready():
 	if false:
@@ -34,3 +37,7 @@ func _ready():
 		civilian_killed.emit()
 		
 		balikbayan_box_dropped.emit(Vector2.ZERO)
+		
+		trade_requested.emit(0.0, null)
+		
+		press_blackout.emit(0.0)

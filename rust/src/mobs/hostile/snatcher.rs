@@ -57,6 +57,8 @@ impl ICharacterBody2D for Snatcher {
 
     fn ready(&mut self) {
         self.base_mut().add_to_group("enemy");
+        let callable = self.base().callable("_on_animation_finished");
+        self.sprite.connect("animation_finished", &callable);
     }
 
     fn process(&mut self, _delta: f64) {
@@ -67,6 +69,7 @@ impl ICharacterBody2D for Snatcher {
         if self.has_stolen {
             self.mob_state = MobState::Fleeing;
             if let Some(flee_pos) = self.flee_target {
+                self.sprite.play_ex().name("walking_running").done();
                 let pos = self.base_mut().get_global_position();
                 let dir = (flee_pos - pos).normalized();
                 self.sprite.set_flip_h(dir.x < 0.0);
@@ -97,6 +100,7 @@ impl ICharacterBody2D for Snatcher {
 
         if distance > self.aggro_range {
             self.mob_state = MobState::Idle;
+            self.sprite.play_ex().name("default").done();
             self.base_mut().set_velocity(Vector2::ZERO);
             self.base_mut().move_and_slide();
             return;
@@ -116,7 +120,10 @@ impl ICharacterBody2D for Snatcher {
 impl Entity for Snatcher {
     fn take_damage(&mut self, amount: i32) {
         self.health = (self.health - amount).max(0);
-        if !self.is_alive() {
+
+        if self.is_alive() {
+            self.sprite.play_ex().name("hit").done();
+        } else {
             if self.has_stolen && self.stole_piso_successfully {
                 let steal_amount = self.steal_amount;
                 let mut rng = rand::rng();
@@ -137,8 +144,9 @@ impl Entity for Snatcher {
                     ],
                 );
             }
+
             self.mob_state = MobState::Dead;
-            self.base_mut().queue_free();
+            self.sprite.play_ex().name("dead").done();
         }
     }
     fn heal(&mut self, amount: i32) {
@@ -174,6 +182,20 @@ impl Snatcher {
     #[signal]
     fn drop_stolen_piso(amount: i32, position: Vector2);
 
+    #[func]
+    fn _on_animation_finished(&mut self) {
+        let current_anim = self.sprite.get_animation().to_string();
+
+        match current_anim.as_str() {
+            "dead" => {
+                self.base_mut().queue_free();
+            }
+            "hit" => {
+                self.sprite.play_ex().name("walk").done();
+            }
+            _ => {}
+        }
+    }
     fn try_steal(&mut self, player: &mut godot::obj::GdMut<Rustplayer>) {
         if self.has_stolen {
             return;
@@ -182,6 +204,8 @@ impl Snatcher {
         let steal_amount = self.steal_amount;
         let had_piso = player.spend_piso(steal_amount);
         self.stole_piso_successfully = had_piso;
+
+        self.sprite.play_ex().name("walking_running").done();
 
         let msg = if had_piso {
             self.base_mut()

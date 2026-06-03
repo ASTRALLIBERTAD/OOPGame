@@ -1,4 +1,5 @@
 extends Control
+const ArmorUiScript := preload("res://UserInterface/armor_ui.gd")
 @onready var _inv: Inventory = preload("res://Collectibles/items/inventory.res")
 @onready var _slots: Array = $NinePatchRect/GridContainer.get_children()
 
@@ -8,12 +9,20 @@ var _first_slot : int = -1
 @onready var _tex: Sprite2D = $NinePatchRect/Sprite2D
 var _held_item: Texture = null
 
+var _armor_ui
+
 func _ready() -> void:
 	_inv.update.connect(_update_slots)
 	_update_slots()
 	for b in range(_slots.size()):
 		var btn = _slots[b].get_node("CenterContainer/Panel/Button") as Button
 		btn.connect("pressed", func() -> void: _on_slot_pressed(b))
+
+	# Build the armor UI at runtime (no scene/editor steps) and route its slot
+	# taps through our existing tap-to-select state.
+	_armor_ui = ArmorUiScript.new()
+	add_child(_armor_ui)
+	_armor_ui.armor_slot_pressed.connect(_on_armor_slot_pressed)
 
 func _on_slot_pressed(index: int) -> void:
 	print("Slot pressed:", index)
@@ -70,3 +79,32 @@ func _update_slots():
 	for i in range(min(_inv.slots.size(), _slots.size())):
 		_slots[i].update(_inv.slots[i])
 		print("happpe")
+
+func _reset_selection() -> void:
+	_first_slot = -1
+	_tapped_slot.clear()
+	_held_item = null
+	_tex.visible = false
+
+func _on_armor_slot_pressed(slot_index: int) -> void:
+	# An inventory item is selected -> try to equip it onto this armor slot.
+	if _first_slot != -1:
+		var item := _inv.slots[_first_slot].item as Collectibles
+		if item != null and item.is_armor() \
+				and item.get_armor_piece().get_slot_index() == slot_index:
+			# `=` not `:=`: _armor_ui is untyped, so the parser can't infer the
+			# try_equip() return type.
+			var displaced = _armor_ui.try_equip(item)
+			_inv.slots[_first_slot].clear_item()
+			# Whatever was previously equipped here goes back to the inventory.
+			if displaced != null and String(displaced.get_name()) != "":
+				_inv.insert(displaced, -1, -1)   # emits inventory update
+			_update_slots()
+		_reset_selection()
+	else:
+		# Nothing selected -> unequip this slot back into the inventory.
+		# `=` not `:=`: untyped _armor_ui, so unequip_slot()'s type can't be inferred.
+		var removed = _armor_ui.unequip_slot(slot_index)
+		if removed != null and String(removed.get_name()) != "":
+			_inv.insert(removed, -1, -1)
+			_update_slots()

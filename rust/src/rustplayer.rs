@@ -6,6 +6,8 @@ use godot::prelude::*;
 use godot::tools::get_autoload_by_name;
 use std::str::FromStr;
 
+use crate::armor_inventory::ArmorInventory;
+use crate::armor_piece::ArmorPiece;
 use crate::entity::Entity;
 use crate::heart::Heart;
 use crate::inv_slot::InvSlot;
@@ -33,6 +35,9 @@ pub struct Rustplayer {
 
     #[export]
     inv: OnEditor<Gd<Inventory>>,
+
+    #[export]
+    armor_inv: OnEditor<Gd<ArmorInventory>>,
 
     #[export]
     item_slot: OnEditor<Gd<Control>>,
@@ -97,6 +102,7 @@ impl ICharacterBody2D for Rustplayer {
             sprite: OnEditor::default(),
             coords: OnEditor::default(),
             inv: OnEditor::default(),
+            armor_inv: OnEditor::default(),
             item_slot: OnEditor::default(),
             is_open: false,
             heart_ui: OnEditor::default(),
@@ -130,32 +136,17 @@ impl ICharacterBody2D for Rustplayer {
     }
 
     fn ready(&mut self) {
-        self.base_mut().add_to_group("player");
-
-        let pid = self.base_mut().get_multiplayer_authority();
-        self.id = pid;
-
-        godot_print!("Player ID is : {}", self.id);
-        let is_authority = self.base_mut().is_multiplayer_authority();
-
-        let mut label_piso = self
-            .base()
-            .get_node_as::<Label>("Control/CanvasLayer/VBoxContainer/piso");
-        let piso = self.piso.to_string();
-        label_piso.set_text(&piso);
-
-        if !is_authority {
-            self.camera.make_current();
-            self.heart_ui.bind_mut().set_heart_display(self.health);
-        }
-
-        self.attack_area.set_monitoring(true);
-        self.attack_area.set_monitorable(false);
+        // All setup lives in init_player() so it can also be invoked directly
+        // from GDScript. When a GDScript `_ready()` is attached it shadows this
+        // Rust virtual (super() can't reach it), so Players.gd calls
+        // init_player() itself to get identical initialization.
+        self.init_player();
     }
 
     fn process(&mut self, delta: f64) {
         if self.base_mut().is_multiplayer_authority() {
-            let speed: f32 = 100.0;
+            let armor_speed_mod = self.armor_inv.bind().total_speed_modifier();
+            let speed: f32 = 100.0 * (1.0 + armor_speed_mod);
             let input = Input::singleton();
 
             let direction = Input::get_vector(
@@ -248,7 +239,9 @@ impl Entity for Rustplayer {
             godot_print!("Sanctuary protects the player!");
             return;
         }
-        self.health = (self.health - amount).max(0);
+        let reduction = self.armor_inv.bind().total_defense();
+        let actual_damage = (amount - reduction).max(0);
+        self.health = (self.health - actual_damage).max(0);
         self.heart_ui.bind_mut().set_heart_display(self.health);
         if !self.is_alive() {
             godot_print!("player dead");
@@ -271,9 +264,77 @@ impl Rustplayer {
     #[signal]
     fn piso_changed(new_total: i32);
 
+    #[func]
     #[rpc(unreliable, any_peer)]
     fn update_position(&mut self, pos: Vector2) {
         self.target_position = pos;
+    }
+
+    /// Full player initialization (group registration, id, HUD, camera, RPCs).
+    ///
+    /// This is the body that `ICharacterBody2D::ready()` used to contain. It is
+    /// exposed as a `#[func]` because a GDScript `_ready()` attached to this node
+    /// shadows the gdext-generated `_ready` and cannot chain into the Rust base
+    /// via `super()`. Players.gd calls `init_player()` from its own `_ready()` to
+    /// get exactly the same setup (e.g. `add_to_group("player")`, which the save
+    /// system relies on — without it: "No player found, skipping save").
+    ///
+    /// Idempotent: safe whether invoked by `ready()` or directly from GDScript.
+    #[func]
+    pub fn init_player(&mut self) {
+        self.base_mut().add_to_group("player");
+
+        let pid = self.base_mut().get_multiplayer_authority();
+        self.id = pid;
+
+        godot_print!("Player ID is : {}", self.id);
+        let is_authority = self.base_mut().is_multiplayer_authority();
+
+        let mut label_piso = self
+            .base()
+            .get_node_as::<Label>("Control/CanvasLayer/VBoxContainer/piso");
+        let piso = self.piso.to_string();
+        label_piso.set_text(&piso);
+
+        if !is_authority {
+            self.camera.make_current();
+            self.heart_ui.bind_mut().set_heart_display(self.health);
+        }
+
+        self.attack_area.set_monitoring(true);
+        self.attack_area.set_monitorable(false);
+
+        // Register #[rpc] methods explicitly; the gdext auto-registration in the
+        // generated _ready is bypassed when a GDScript overrides _ready.
+        self.register_rpcs();
+    }
+
+    /// Explicitly registers this node's RPC methods at runtime.
+    ///
+    /// gdext normally registers `#[rpc]` methods inside its generated `_ready`
+    /// (the `__before_ready` hook). When a GDScript attached to this node
+    /// overrides `_ready` and cannot chain into the Rust base via `super()`,
+    /// that registration never runs and `update_position` has no RPC config,
+    /// producing "Unable to get the RPC configuration" every frame.
+    ///
+    /// Call this from the GDScript `_ready()` so the config is set regardless.
+    /// Mirrors the `#[rpc(unreliable, any_peer)]` attribute on `update_position`.
+    #[func]
+    pub fn register_rpcs(&mut self) {
+        use godot::classes::multiplayer_api::RpcMode;
+        use godot::classes::multiplayer_peer::TransferMode;
+        use godot::register::RpcConfig;
+
+        let config = RpcConfig {
+            rpc_mode: RpcMode::ANY_PEER,
+            transfer_mode: TransferMode::UNRELIABLE,
+            call_local: false,
+            channel: 0,
+        };
+
+        let mut gd = self.to_gd();
+        let node = gd.upcast_mut::<Node>();
+        config.configure_node(node, "update_position");
     }
 
     #[func]
@@ -538,6 +599,28 @@ impl Rustplayer {
     #[func]
     pub fn get_heart_ui(&self) -> Gd<Heart> {
         self.heart_ui.clone()
+    }
+
+    // ── Armor ──────────────────────────────────────────────────────────
+
+    /// Equips an `ArmorPiece`, replacing whatever is in that slot.
+    /// Returns the previously-equipped piece (or an empty `Gd` if the slot was empty).
+    #[func]
+    pub fn equip_armor(&mut self, piece: Gd<ArmorPiece>) -> Gd<ArmorPiece> {
+        self.armor_inv.bind_mut().equip(piece)
+    }
+
+    /// Unequips the piece in the given slot index (0=Helmet, 1=Body, 2=Leggings, 3=Boots).
+    /// Returns the removed piece (or an empty `Gd` if the slot was already empty).
+    #[func]
+    pub fn unequip_armor(&mut self, slot_index: i32) -> Gd<ArmorPiece> {
+        self.armor_inv.bind_mut().unequip(slot_index)
+    }
+
+    /// Total defense value across all equipped armor pieces.
+    #[func]
+    pub fn get_total_defense(&self) -> i32 {
+        self.armor_inv.bind().total_defense()
     }
 }
 

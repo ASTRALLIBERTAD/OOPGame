@@ -1,0 +1,9 @@
+[gd_resource type="Collectibles" format=3 uid="uid://b153dvmiw6wwr"]
+
+[ext_resource type="ArmorPiece" uid="uid://jou8wx62sx0r" path="res://Player/test_helmet.tres" id="1_osxhf"]
+[ext_resource type="Texture2D" uid="uid://dugxbvt8erms6" path="res://Assets/16x16 RPG Item Pack/Item__64.png" id="2_osxhf"]
+
+[resource]
+name = "Iron Helmet"
+icon = ExtResource("2_osxhf")
+armor_piece = ExtResource("1_osxhf")

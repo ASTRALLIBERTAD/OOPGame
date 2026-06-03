@@ -1,21 +1,10 @@
 use godot::classes::{AnimatedSprite2D, CharacterBody2D, ICharacterBody2D};
 use godot::obj::WithBaseField;
 use godot::prelude::*;
+use godot::tools::get_autoload_by_name;
 
 use crate::entity::{Entity, HostileBehavior, MobState, NeutralBehavior};
 use crate::rustplayer::Rustplayer;
-
-const WANDER_SPEED: f32 = 45.0;
-const FLEE_SPEED: f32 = 110.0;
-const MAX_HP: i32 = 18;
-const FEAR_RADIUS: f32 = 140.0;
-const FLEE_DURATION: f64 = 3.0;
-const INTEL_INTERVAL: f64 = 20.0;
-const PUBLISH_INTERVAL: f64 = 45.0;
-const MAX_TRUST: i32 = 5;
-const WANDER_RADIUS: f32 = 180.0;
-const HOSTILE_CORRUPTION_THRESHOLD: i32 = 8;
-const BLACKOUT_DURATION: f64 = 30.0;
 
 #[derive(GodotClass)]
 #[class(base=CharacterBody2D)]
@@ -31,6 +20,36 @@ pub struct Journalist {
     health: i32,
 
     #[export]
+    wander_speed: f32,
+
+    #[export]
+    flee_speed: f32,
+
+    #[export]
+    fear_radius: f32,
+
+    #[export]
+    wander_radius: f32,
+
+    #[export]
+    wander_interval: f64,
+
+    #[export]
+    flee_duration: f64,
+
+    #[export]
+    intel_interval: f64,
+
+    #[export]
+    publish_interval: f64,
+
+    #[export]
+    blackout_duration: f64,
+
+    #[export]
+    hostile_corruption_threshold: i32,
+
+    #[export]
     #[var(get = get_trust, set = set_trust)]
     trust: i32,
 
@@ -44,17 +63,13 @@ pub struct Journalist {
 
     mob_state: MobState,
     is_hostile: bool,
-
+    home_position: Vector2,
     wander_target: Vector2,
     wander_timer: f64,
-    wander_interval: f64,
-
     flee_target: Option<Vector2>,
     flee_timer: f64,
-
     intel_timer: f64,
     publish_timer: f64,
-
     boss_exposed: bool,
     blackout_active: bool,
     blackout_timer: f64,
@@ -66,15 +81,25 @@ impl ICharacterBody2D for Journalist {
         Self {
             base,
             sprite: OnEditor::default(),
-            health: MAX_HP,
+            health: 18,
+            wander_speed: 45.0,
+            flee_speed: 110.0,
+            fear_radius: 140.0,
+            wander_radius: 180.0,
+            wander_interval: 5.0,
+            flee_duration: 3.0,
+            intel_interval: 20.0,
+            publish_interval: 45.0,
+            blackout_duration: 30.0,
+            hostile_corruption_threshold: 8,
             trust: 0,
             intel_count: 0,
             corruption_level: 0,
             mob_state: MobState::Idle,
             is_hostile: false,
+            home_position: Vector2::ZERO,
             wander_target: Vector2::ZERO,
             wander_timer: 0.0,
-            wander_interval: 5.0,
             flee_target: None,
             flee_timer: 0.0,
             intel_timer: 0.0,
@@ -90,6 +115,7 @@ impl ICharacterBody2D for Journalist {
         self.base_mut().add_to_group("journalist");
         let pos = self.base_mut().get_global_position();
         self.wander_target = pos;
+        self.home_position = pos;
     }
 
     fn process(&mut self, delta: f64) {
@@ -106,20 +132,22 @@ impl ICharacterBody2D for Journalist {
             return;
         }
 
-        if let Some(threat) = self.nearest_threat_position() {
-            self.flee_from(threat);
-        }
-
         if self.mob_state == MobState::Fleeing {
             self.flee_timer += delta;
-            if self.flee_timer >= FLEE_DURATION {
+            if self.flee_timer >= self.flee_duration {
                 self.flee_timer = 0.0;
                 self.flee_target = None;
                 self.mob_state = MobState::Idle;
+                self.pick_wander_target();
             } else if let Some(fp) = self.flee_target {
-                self.move_toward(fp, FLEE_SPEED);
+                self.move_toward(fp, self.flee_speed);
                 return;
             }
+        }
+
+        if let Some(threat) = self.nearest_threat_position() {
+            self.flee_from(threat);
+            return;
         }
 
         self.wander_timer += delta;
@@ -128,7 +156,7 @@ impl ICharacterBody2D for Journalist {
             self.pick_wander_target();
         }
         let target = self.wander_target;
-        self.move_toward(target, WANDER_SPEED);
+        self.move_toward(target, self.wander_speed);
     }
 }
 
@@ -139,19 +167,30 @@ impl Entity for Journalist {
         }
         self.health = (self.health - amount).max(0);
 
-        if !self.is_hostile && self.corruption_level >= HOSTILE_CORRUPTION_THRESHOLD {
+        if !self.is_hostile && self.corruption_level >= self.hostile_corruption_threshold {
             self.become_hostile();
         }
 
         if !self.is_alive() {
             self.mob_state = MobState::Dead;
-            self.base_mut().emit_signal("journalist_silenced", &[]);
+            let mut event_bus = get_autoload_by_name::<Node>("EventBus");
+            event_bus.call(
+                "emit_signal",
+                &[
+                    Variant::from(GString::from("message")),
+                    Variant::from(GString::from("The journalist has been silenced.")),
+                ],
+            );
+            event_bus.call(
+                "emit_signal",
+                &[Variant::from(GString::from("civilian_killed"))],
+            );
             self.base_mut().queue_free();
         }
     }
 
     fn heal(&mut self, amount: i32) {
-        self.health = (self.health + amount).clamp(0, MAX_HP);
+        self.health = (self.health + amount).clamp(0, 18);
     }
 
     fn is_alive(&self) -> bool {
@@ -171,8 +210,14 @@ impl NeutralBehavior for Journalist {
         self.is_hostile = true;
         self.base_mut().remove_from_group("neutral");
         self.base_mut().add_to_group("enemy");
-        godot_print!("Journalist: 'I've had enough!'");
-        self.base_mut().emit_signal("turned_hostile", &[]);
+        let mut event_bus = get_autoload_by_name::<Node>("EventBus");
+        event_bus.call(
+            "emit_signal",
+            &[
+                Variant::from(GString::from("message")),
+                Variant::from(GString::from("Mamamahayag: 'I've had enough!'")),
+            ],
+        );
     }
 }
 
@@ -191,39 +236,13 @@ impl HostileBehavior for Journalist {
 
     fn attack(&mut self, target: &mut dyn Entity) {
         target.take_damage(2);
-        let pos = self.base_mut().get_global_position();
-        let away = Vector2::new(pseudo_rand() - 0.5, pseudo_rand() - 0.5).normalized();
-        self.flee_target = Some(pos + away * 300.0);
-        self.flee_timer = 0.0;
-        self.mob_state = MobState::Fleeing;
-        self.is_hostile = false;
-        self.base_mut().remove_from_group("enemy");
-        self.base_mut().add_to_group("neutral");
     }
 }
 
 #[godot_api]
 impl Journalist {
     #[signal]
-    fn intel_gathered(count: i32);
-
-    #[signal]
-    fn article_published(intel_count: i32);
-
-    #[signal]
-    fn intel_drop(position: Vector2);
-
-    #[signal]
     fn expose_boss();
-
-    #[signal]
-    fn press_blackout(duration: f64);
-
-    #[signal]
-    fn journalist_silenced();
-
-    #[signal]
-    fn turned_hostile();
 
     #[func]
     pub fn on_interact(&mut self) {
@@ -231,28 +250,49 @@ impl Journalist {
             return;
         }
 
-        self.trust = (self.trust + 1).min(MAX_TRUST);
-
-        godot_print!(
-            "Journalist: '{}' (trust: {}/{}, intel: {})",
-            self.interact(),
-            self.trust,
-            MAX_TRUST,
-            self.intel_count
-        );
-
-        let intel_count = self.intel_count;
-        self.base_mut()
-            .emit_signal("intel_gathered", &[Variant::from(intel_count)]);
+        self.trust = (self.trust + 1).min(5);
+        let mut event_bus = get_autoload_by_name::<Node>("EventBus");
 
         if self.trust >= 3 {
             let pos = self.base_mut().get_global_position();
-            self.base_mut()
-                .emit_signal("intel_drop", &[Variant::from(pos)]);
-            godot_print!("Journalist hands over an intel document.");
+            event_bus.call(
+                "emit_signal",
+                &[
+                    Variant::from(GString::from("item_dropped")),
+                    Variant::from(GString::from("intel_document")),
+                    Variant::from(pos),
+                ],
+            );
+            event_bus.call(
+                "emit_signal",
+                &[
+                    Variant::from(GString::from("message")),
+                    Variant::from(GString::from(
+                        format!(
+                            "Mamamahayag: 'Here is what I know. Trust: {}/5'",
+                            self.trust
+                        )
+                        .as_str(),
+                    )),
+                ],
+            );
+        } else {
+            event_bus.call(
+                "emit_signal",
+                &[
+                    Variant::from(GString::from("message")),
+                    Variant::from(GString::from(
+                        format!(
+                            "Mamamahayag: 'I'm watching everything. Trust: {}/5'",
+                            self.trust
+                        )
+                        .as_str(),
+                    )),
+                ],
+            );
         }
 
-        if self.trust >= MAX_TRUST && !self.boss_exposed {
+        if self.trust >= 5 && !self.boss_exposed {
             self.boss_exposed = true;
             self.base_mut().emit_signal("expose_boss", &[]);
             self.trigger_press_blackout();
@@ -261,7 +301,7 @@ impl Journalist {
 
     #[func]
     pub fn press_discount(&self) -> f32 {
-        (self.trust as f32 / MAX_TRUST as f32) * 0.3
+        (self.trust as f32 / 5.0) * 0.3
     }
 
     #[func]
@@ -276,7 +316,7 @@ impl Journalist {
 
     #[func]
     pub fn set_health(&mut self, health: i32) {
-        self.health = health.clamp(0, MAX_HP);
+        self.health = health.clamp(0, 18);
     }
 
     #[func]
@@ -286,7 +326,7 @@ impl Journalist {
 
     #[func]
     pub fn set_trust(&mut self, trust: i32) {
-        self.trust = trust.clamp(0, MAX_TRUST);
+        self.trust = trust.clamp(0, 5);
     }
 
     #[func]
@@ -307,11 +347,27 @@ impl Journalist {
     fn trigger_press_blackout(&mut self) {
         self.blackout_active = true;
         self.blackout_timer = 0.0;
-        self.base_mut()
-            .emit_signal("press_blackout", &[Variant::from(BLACKOUT_DURATION)]);
-        godot_print!(
-            "Journalist: 'Boss regens from corruption tiles — cleanse them! Blackout active for {}s.'",
-            BLACKOUT_DURATION
+        let dur = self.blackout_duration;
+        let mut event_bus = get_autoload_by_name::<Node>("EventBus");
+        event_bus.call(
+            "emit_signal",
+            &[
+                Variant::from(GString::from("message")),
+                Variant::from(GString::from(
+                    format!(
+                        "Mamamahayag: 'Boss regens from corruption tiles — cleanse them! Blackout for {}s.'",
+                        dur as i32
+                    )
+                    .as_str(),
+                )),
+            ],
+        );
+        event_bus.call(
+            "emit_signal",
+            &[
+                Variant::from(GString::from("press_blackout")),
+                Variant::from(dur),
+            ],
         );
     }
 
@@ -320,10 +376,9 @@ impl Journalist {
             return;
         }
         self.blackout_timer += delta;
-        if self.blackout_timer >= BLACKOUT_DURATION {
+        if self.blackout_timer >= self.blackout_duration {
             self.blackout_active = false;
             self.blackout_timer = 0.0;
-            godot_print!("Press blackout ended.");
         }
     }
 
@@ -341,16 +396,15 @@ impl Journalist {
             });
 
         let rate = if has_nearby_enemy {
-            INTEL_INTERVAL * 0.5
+            self.intel_interval * 0.5
         } else {
-            INTEL_INTERVAL
+            self.intel_interval
         };
 
         self.intel_timer += delta;
         if self.intel_timer >= rate {
             self.intel_timer = 0.0;
             self.intel_count += 1;
-            godot_print!("Journalist gathered intel. Total: {}", self.intel_count);
         }
     }
 
@@ -359,13 +413,27 @@ impl Journalist {
             return;
         }
         self.publish_timer += delta;
-        if self.publish_timer >= PUBLISH_INTERVAL {
+        if self.publish_timer >= self.publish_interval {
             self.publish_timer = 0.0;
             let count = self.intel_count;
             self.intel_count = 0;
-            self.base_mut()
-                .emit_signal("article_published", &[Variant::from(count)]);
-            godot_print!("Journalist published an article (intel: {})!", count);
+            let mut event_bus = get_autoload_by_name::<Node>("EventBus");
+            event_bus.call(
+                "emit_signal",
+                &[
+                    Variant::from(GString::from("article_published")),
+                    Variant::from(count),
+                ],
+            );
+            event_bus.call(
+                "emit_signal",
+                &[
+                    Variant::from(GString::from("message")),
+                    Variant::from(GString::from(
+                        format!("Mamamahayag published an article! Intel: {}", count).as_str(),
+                    )),
+                ],
+            );
         }
     }
 
@@ -398,7 +466,7 @@ impl Journalist {
             self.base_mut().add_to_group("neutral");
         } else {
             self.aggro(player_pos);
-            self.chase(player_pos, FLEE_SPEED * 0.8);
+            self.chase(player_pos, self.flee_speed * 0.8);
         }
         let _ = delta;
     }
@@ -409,7 +477,6 @@ impl Journalist {
         self.flee_target = Some(pos + away * 250.0);
         self.flee_timer = 0.0;
         self.mob_state = MobState::Fleeing;
-        godot_print!("Journalist is fleeing!");
     }
 
     fn nearest_threat_position(&mut self) -> Option<Vector2> {
@@ -420,27 +487,27 @@ impl Journalist {
             if let Ok(body) = enemy.try_cast::<CharacterBody2D>() {
                 let epos = body.get_global_position();
                 let dist = my_pos.distance_to(epos);
-                if dist <= FEAR_RADIUS
-                    && nearest.is_none_or(|(d, _)| dist < d) {
-                        nearest = Some((dist, epos));
-                    }
+                if dist <= self.fear_radius && nearest.is_none_or(|(d, _)| dist < d) {
+                    nearest = Some((dist, epos));
+                }
             }
         }
         nearest.map(|(_, pos)| pos)
     }
 
     fn pick_wander_target(&mut self) {
-        let pos = self.base_mut().get_global_position();
-        let offset = Vector2::new(
-            (pseudo_rand() - 0.5) * WANDER_RADIUS * 2.0,
-            (pseudo_rand() - 0.5) * WANDER_RADIUS * 2.0,
-        );
-        self.wander_target = pos + offset;
+        let angle = (godot::global::randf() * std::f64::consts::TAU) as f32;
+        let dist = godot::global::randf() as f32 * self.wander_radius;
+        let offset = Vector2::new(angle.cos() * dist, angle.sin() * dist);
+        self.wander_target = self.home_position + offset;
     }
 
     fn move_toward(&mut self, target: Vector2, speed: f32) {
         let pos = self.base_mut().get_global_position();
         if pos.distance_to(target) < 6.0 {
+            if speed == self.wander_speed {
+                self.wander_timer = self.wander_interval;
+            }
             self.base_mut().set_velocity(Vector2::ZERO);
         } else {
             let dir = (target - pos).normalized();
@@ -449,13 +516,4 @@ impl Journalist {
         }
         self.base_mut().move_and_slide();
     }
-}
-
-fn pseudo_rand() -> f32 {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let t = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .subsec_nanos();
-    (t % 10_000) as f32 / 10_000.0
 }

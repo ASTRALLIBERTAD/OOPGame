@@ -55,7 +55,7 @@ struct ConfigSettings {
 
 #[derive(GodotClass)]
 #[class(base = Node, init)]
-struct SaveManagerRust {
+pub struct SaveManagerRust {
     #[base]
     base: Base<Node>,
 
@@ -512,7 +512,7 @@ impl SaveManagerRust {
     }
 
     #[func]
-    fn get_config_player_name(&self) -> String {
+    pub fn get_config_player_name(&self) -> String {
         self.read_config()
             .map(|s| s.player_name)
             .unwrap_or_else(|| "ASTRAL".to_string())

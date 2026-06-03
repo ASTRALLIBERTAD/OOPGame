@@ -139,8 +139,7 @@ impl ICharacterBody2D for Rustplayer {
         godot_print!("Player ID is : {}", self.id);
         let mut save_manager = get_autoload_by_name::<SaveManagerRust>("RustSaveManager1");
         let player_name = save_manager.bind_mut().get_config_player_name();
-        let mut name_label = self.base_mut()
-            .get_node_as::<Label>("name");
+        let mut name_label = self.base_mut().get_node_as::<Label>("name");
         name_label.set_text(&player_name);
         let is_authority = self.base_mut().is_multiplayer_authority();
 

@@ -188,7 +188,7 @@ impl Priest {
                 self.blessings_remaining -= 1;
                 let heal = HEAL_AMOUNT * 2;
                 player_gd.bind_mut().heal(heal);
-                // player_gd.bind_mut().apply_blessing(BLESSING_DURATION);
+                player_gd.bind_mut().apply_blessing(BLESSING_DURATION);
                 let mut event_bus = get_autoload_by_name::<Node>("EventBus");
                 event_bus.call(
                     "emit_signal",

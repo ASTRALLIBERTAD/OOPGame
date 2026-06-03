@@ -268,15 +268,34 @@ impl Ofw {
 
         if !self.warning_fired && self.visit_time_remaining <= self.visit_warning_at {
             self.warning_fired = true;
-            let t = self.visit_time_remaining;
+            let t = self.visit_time_remaining as i32;
+            let mut event_bus = get_autoload_by_name::<Node>("EventBus");
+            event_bus.call(
+                "emit_signal",
+                &[
+                    Variant::from(GString::from("message")),
+                    Variant::from(GString::from(
+                        format!("OFW: 'I have to leave soon. {}s remaining.'", t).as_str(),
+                    )),
+                ],
+            );
+            let vt = self.visit_time_remaining;
             self.base_mut()
-                .emit_signal("visit_almost_over", &[Variant::from(t)]);
-            godot_print!("OFW: 'I have to leave soon. Anything else?'");
+                .emit_signal("visit_almost_over", &[Variant::from(vt)]);
         }
 
         if self.visit_time_remaining <= 0.0 {
+            let mut event_bus = get_autoload_by_name::<Node>("EventBus");
+            event_bus.call(
+                "emit_signal",
+                &[
+                    Variant::from(GString::from("message")),
+                    Variant::from(GString::from(
+                        "OFW: 'Goodbye. I'll send money when I get there.'",
+                    )),
+                ],
+            );
             self.base_mut().emit_signal("visit_ended", &[]);
-            godot_print!("OFW: 'Goodbye. I'll send money when I get there.'");
             self.base_mut().queue_free();
         }
     }
@@ -284,16 +303,35 @@ impl Ofw {
     #[func]
     pub fn on_interact(&mut self) {
         if self.has_traded {
-            godot_print!("OFW: 'I already gave you everything I brought.'");
+            let mut event_bus = get_autoload_by_name::<Node>("EventBus");
+            event_bus.call(
+                "emit_signal",
+                &[
+                    Variant::from(GString::from("message")),
+                    Variant::from(GString::from(
+                        "OFW: 'I already gave you everything I brought.'",
+                    )),
+                ],
+            );
             return;
         }
+
         self.has_traded = true;
-        let stock = self.stock_id.clone();
-        self.base_mut()
-            .emit_signal("trade_opened", &[Variant::from(stock)]);
-        godot_print!(
-            "OFW opens their box. Visit time remaining: {:.0}s.",
-            self.visit_time_remaining
+        let pos = self.base_mut().get_global_position();
+        let mut event_bus = get_autoload_by_name::<Node>("EventBus");
+        event_bus.call(
+            "emit_signal",
+            &[
+                Variant::from(GString::from("balikbayan_box_dropped")),
+                Variant::from(pos),
+            ],
+        );
+        event_bus.call(
+            "emit_signal",
+            &[
+                Variant::from(GString::from("message")),
+                Variant::from(GString::from("OFW: 'Here, I brought this for you.'")),
+            ],
         );
     }
 

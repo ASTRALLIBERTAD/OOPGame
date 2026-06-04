@@ -85,6 +85,12 @@ pub struct Rustplayer {
     arrested_timer: f64,
 
     piso: i32,
+
+    in_sanctuary: bool,
+    blessed: bool,
+    blessed_timer: f64,
+    speed_bonus: f32,
+    speed_bonus_timer: f64,
 }
 
 #[godot_api]
@@ -122,6 +128,12 @@ impl ICharacterBody2D for Rustplayer {
             arrested_timer: 0.0,
 
             piso: 200,
+
+            in_sanctuary: false,
+            blessed: false,
+            blessed_timer: 0.0,
+            speed_bonus: 0.0,
+            speed_bonus_timer: 0.0,
         }
     }
 
@@ -151,7 +163,7 @@ impl ICharacterBody2D for Rustplayer {
 
     fn process(&mut self, delta: f64) {
         if self.base_mut().is_multiplayer_authority() {
-            let speed: f32 = 100.0;
+            let speed: f32 = 100.0 + self.speed_bonus;
             let input = Input::singleton();
 
             let direction = Input::get_vector(
@@ -231,6 +243,8 @@ impl ICharacterBody2D for Rustplayer {
             self.tick_indebted(delta);
             self.tick_confused(delta);
             self.tick_arrested(delta);
+            self.tick_blessed(delta);
+            self.tick_speed_bonus(delta);
         }
     }
 }
@@ -240,12 +254,17 @@ impl Entity for Rustplayer {
         if !self.is_alive() {
             return;
         }
+        if self.in_sanctuary {
+            godot_print!("Sanctuary protects the player!");
+            return;
+        }
         self.health = (self.health - amount).max(0);
         self.heart_ui.bind_mut().set_heart_display(self.health);
         if !self.is_alive() {
             godot_print!("player dead");
         }
     }
+
     fn heal(&mut self, amount: i32) {
         self.health = (self.health + amount).clamp(0, MAX_HEALTH);
         self.heart_ui.bind_mut().set_heart_display(self.health);
@@ -381,6 +400,9 @@ impl Rustplayer {
 
     #[func]
     pub fn apply_confused(&mut self, duration: f64) {
+        if self.blessed {
+            return;
+        }
         self.confused = true;
         self.confused_timer = -duration;
         godot_print!("Confused applied for {}s!", duration);
@@ -405,6 +427,9 @@ impl Rustplayer {
 
     #[func]
     pub fn apply_arrested(&mut self, duration: f64) {
+        if self.blessed {
+            return;
+        }
         self.arrested = true;
         self.arrested_timer = -duration;
         godot_print!("Player arrested for {}s!", duration);
@@ -535,6 +560,16 @@ impl Rustplayer {
 #[godot_api(secondary)]
 impl Rustplayer {
     #[func]
+    pub fn set_in_sanctuary(&mut self, value: bool) {
+        self.in_sanctuary = value;
+    }
+
+    #[func]
+    pub fn is_in_sanctuary(&self) -> bool {
+        self.in_sanctuary
+    }
+
+    #[func]
     pub fn get_piso(&self) -> i32 {
         self.piso
     }
@@ -572,6 +607,77 @@ impl Rustplayer {
             &[
                 Variant::from(GString::from("piso_changed")),
                 Variant::from(piso),
+            ],
+        );
+    }
+
+    fn tick_blessed(&mut self, delta: f64) {
+        if !self.blessed {
+            return;
+        }
+        self.blessed_timer -= delta;
+        if self.blessed_timer <= 0.0 {
+            self.blessed = false;
+            self.blessed_timer = 0.0;
+            let mut event_bus = get_autoload_by_name::<Node>("EventBus");
+            event_bus.call(
+                "emit_signal",
+                &[
+                    Variant::from(GString::from("message")),
+                    Variant::from(GString::from("Blessing wore off.")),
+                ],
+            );
+        }
+    }
+
+    fn tick_speed_bonus(&mut self, delta: f64) {
+        if self.speed_bonus == 0.0 {
+            return;
+        }
+        self.speed_bonus_timer -= delta;
+        if self.speed_bonus_timer <= 0.0 {
+            self.speed_bonus = 0.0;
+            self.speed_bonus_timer = 0.0;
+            let mut event_bus = get_autoload_by_name::<Node>("EventBus");
+            event_bus.call(
+                "emit_signal",
+                &[
+                    Variant::from(GString::from("message")),
+                    Variant::from(GString::from("Speed boost wore off.")),
+                ],
+            );
+        }
+    }
+
+    #[func]
+    pub fn apply_blessing(&mut self, duration: f64) {
+        self.blessed = true;
+        self.blessed_timer = duration;
+        let mut event_bus = get_autoload_by_name::<Node>("EventBus");
+        event_bus.call(
+            "emit_signal",
+            &[
+                Variant::from(GString::from("message")),
+                Variant::from(GString::from("You are blessed. Debuffs blocked.")),
+            ],
+        );
+    }
+
+    #[func]
+    pub fn is_blessed(&self) -> bool {
+        self.blessed
+    }
+
+    #[func]
+    pub fn apply_speed_bonus(&mut self, bonus: f32, duration: f64) {
+        self.speed_bonus = bonus;
+        self.speed_bonus_timer = duration;
+        let mut event_bus = get_autoload_by_name::<Node>("EventBus");
+        event_bus.call(
+            "emit_signal",
+            &[
+                Variant::from(GString::from("message")),
+                Variant::from(GString::from("Speed boosted!")),
             ],
         );
     }

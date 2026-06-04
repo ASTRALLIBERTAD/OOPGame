@@ -20,6 +20,9 @@ pub struct Collectibles {
     #[export]
     #[var(get = is_stackable)]
     stackable: bool,
+
+    #[export]
+    base_price: i32,
 }
 
 #[godot_api]
@@ -31,6 +34,7 @@ impl IResource for Collectibles {
             amount: 1,
             icon: None,
             stackable: bool::default(),
+            base_price: 0,
         }
     }
 }

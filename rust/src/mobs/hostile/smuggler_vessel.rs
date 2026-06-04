@@ -1,6 +1,7 @@
 use godot::classes::{AnimatedSprite2D, CharacterBody2D, ICharacterBody2D};
 use godot::obj::WithBaseField;
 use godot::prelude::*;
+use godot::tools::get_autoload_by_name;
 
 use crate::entity::{Entity, HostileBehavior, MobState};
 use crate::rustplayer::Rustplayer;
@@ -351,14 +352,16 @@ impl SmuglerVessel {
 
     fn on_death(&mut self) {
         let pos = self.base_mut().get_global_position();
-        godot_print!("Smuggler Vessel sinks. Cargo in the water.");
-
-        // Emit a signal for each cargo slot so the item system can spawn pickups.
         let count = self.cargo_count.clamp(0, CARGO_ITEMS.len() as i32) as usize;
+        let mut event_bus = get_autoload_by_name::<Node>("EventBus");
         for item_id in &CARGO_ITEMS[..count] {
-            self.base_mut().emit_signal(
-                "cargo_dropped",
-                &[Variant::from(GString::from(*item_id)), Variant::from(pos)],
+            event_bus.call(
+                "emit_signal",
+                &[
+                    Variant::from(GString::from("item_dropped")),
+                    Variant::from(GString::from(*item_id)),
+                    Variant::from(pos),
+                ],
             );
         }
     }

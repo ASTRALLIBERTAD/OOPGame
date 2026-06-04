@@ -1,6 +1,7 @@
-use godot::classes::{AnimatedSprite2D, CharacterBody2D, ICharacterBody2D};
+use godot::classes::{AnimatedSprite2D, Area2D, CharacterBody2D, ICharacterBody2D};
 use godot::obj::WithBaseField;
 use godot::prelude::*;
+use godot::tools::get_autoload_by_name;
 
 use crate::entity::{Entity, MobState, PassiveBehavior};
 use crate::rustplayer::Rustplayer;
@@ -30,6 +31,9 @@ pub struct Priest {
     sprite: OnEditor<Gd<AnimatedSprite2D>>,
 
     #[export]
+    sanctuary_area: OnEditor<Gd<Area2D>>,
+
+    #[export]
     #[var(get = get_health, set = set_health)]
     health: i32,
 
@@ -42,6 +46,8 @@ pub struct Priest {
     wander_target: Vector2,
     wander_timer: f64,
     wander_interval: f64,
+
+    home_position: Vector2,
 
     flee_target: Option<Vector2>,
     flee_timer: f64,
@@ -56,12 +62,14 @@ impl ICharacterBody2D for Priest {
         Self {
             base,
             sprite: OnEditor::default(),
+            sanctuary_area: OnEditor::default(),
             health: MAX_HP,
             blessings_remaining: MAX_BLESSINGS,
             mob_state: MobState::Idle,
             wander_target: Vector2::ZERO,
             wander_timer: 0.0,
             wander_interval: 6.0,
+            home_position: Vector2::ZERO,
             flee_target: None,
             flee_timer: 0.0,
             heal_timer: 0.0,
@@ -74,6 +82,8 @@ impl ICharacterBody2D for Priest {
         self.base_mut().add_to_group("civilian");
         self.base_mut().add_to_group("healer");
         let pos = self.base_mut().get_global_position();
+        self.wander_target = pos;
+        self.home_position = pos;
         self.wander_target = pos;
     }
 
@@ -132,12 +142,10 @@ impl Entity for Priest {
 
 impl PassiveBehavior for Priest {
     fn wander(&mut self) {
-        let pos = self.base_mut().get_global_position();
-        let offset = Vector2::new(
-            (pseudo_rand() - 0.5) * WANDER_RADIUS * 2.0,
-            (pseudo_rand() - 0.5) * WANDER_RADIUS * 2.0,
-        );
-        self.wander_target = pos + offset;
+        let angle = (godot::global::randf() * std::f64::consts::TAU) as f32;
+        let dist = godot::global::randf() as f32 * WANDER_RADIUS;
+        let offset = Vector2::new(angle.cos() * dist, angle.sin() * dist);
+        self.wander_target = self.home_position + offset;
     }
 
     fn flee(&mut self, from: Vector2) {
@@ -170,28 +178,46 @@ impl Priest {
         let players = tree.get_nodes_in_group("player");
 
         for node in players.iter_shared() {
-            if let Ok(mut player_gd) = node.try_cast::<Rustplayer>() {
-                if self.blessings_remaining > 0 {
-                    self.blessings_remaining -= 1;
-                    let heal = HEAL_AMOUNT * 2;
-                    player_gd.bind_mut().heal(heal);
-                    self.base_mut()
-                        .emit_signal("blessing_granted", &[Variant::from(BLESSING_DURATION)]);
-                    self.base_mut()
-                        .emit_signal("heal_player", &[Variant::from(heal)]);
-                    godot_print!(
-                        "Priest blesses the player. Blessings remaining: {}",
-                        self.blessings_remaining
-                    );
-                } else {
-                    let heal = HEAL_AMOUNT / 2;
-                    player_gd.bind_mut().heal(heal);
-                    self.base_mut()
-                        .emit_signal("heal_player", &[Variant::from(heal)]);
-                    godot_print!("Priest: 'I have given all I can. Stay safe.'");
-                }
-                break;
+            let Ok(body) = node.try_cast::<CharacterBody2D>() else {
+                continue;
+            };
+            let Ok(mut player_gd) = body.try_cast::<Rustplayer>() else {
+                continue;
+            };
+            if self.blessings_remaining > 0 {
+                self.blessings_remaining -= 1;
+                let heal = HEAL_AMOUNT * 2;
+                player_gd.bind_mut().heal(heal);
+                player_gd.bind_mut().apply_blessing(BLESSING_DURATION);
+                let mut event_bus = get_autoload_by_name::<Node>("EventBus");
+                event_bus.call(
+                    "emit_signal",
+                    &[
+                        Variant::from(GString::from("message")),
+                        Variant::from(GString::from(
+                            format!(
+                                "Priest blesses you. +{} HP. Blessings left: {}",
+                                heal, self.blessings_remaining
+                            )
+                            .as_str(),
+                        )),
+                    ],
+                );
+            } else {
+                let heal = HEAL_AMOUNT / 2;
+                player_gd.bind_mut().heal(heal);
+                let mut event_bus = get_autoload_by_name::<Node>("EventBus");
+                event_bus.call(
+                    "emit_signal",
+                    &[
+                        Variant::from(GString::from("message")),
+                        Variant::from(GString::from(
+                            "Priest: 'I have given all I can. Stay safe.'",
+                        )),
+                    ],
+                );
             }
+            break;
         }
     }
 
@@ -218,17 +244,33 @@ impl Priest {
         self.sanctuary_timer = 0.0;
 
         let my_pos = self.base_mut().get_global_position();
-        let tree = self.base_mut().get_tree();
-        let players = tree.get_nodes_in_group("player");
+        let bodies = self.sanctuary_area.get_overlapping_bodies();
 
+        for body in bodies.iter_shared() {
+            if body.clone().is_in_group("enemy") {
+                if let Ok(mut enemy) = body.clone().try_cast::<CharacterBody2D>() {
+                    enemy.set_velocity(Vector2::ZERO);
+                    enemy.move_and_slide();
+                }
+            }
+
+            if body.is_in_group("player") {
+                if let Ok(body2) = body.try_cast::<CharacterBody2D>() {
+                    if let Ok(mut player) = body2.try_cast::<Rustplayer>() {
+                        player.bind_mut().set_in_sanctuary(true);
+                    }
+                }
+            }
+        }
+
+        let players = self.base_mut().get_tree().get_nodes_in_group("player");
         for node in players.iter_shared() {
-            if let Ok(player_gd) = node.try_cast::<Rustplayer>() {
-                let player_pos = player_gd.get_global_position();
-                if my_pos.distance_to(player_pos) <= SANCTUARY_RADIUS {
-                    self.base_mut()
-                        .emit_signal("sanctuary_pulse", &[Variant::from(my_pos)]);
-                    godot_print!("Priest: Sanctuary active — player protected.");
-                    break;
+            if let Ok(body) = node.try_cast::<CharacterBody2D>() {
+                let dist = my_pos.distance_to(body.get_global_position());
+                if dist > SANCTUARY_RADIUS {
+                    if let Ok(mut player) = body.try_cast::<Rustplayer>() {
+                        player.bind_mut().set_in_sanctuary(false);
+                    }
                 }
             }
         }
@@ -262,16 +304,15 @@ impl Priest {
 
     fn nearest_threat_position(&mut self) -> Option<Vector2> {
         let my_pos = self.base_mut().get_global_position();
-        let enemies = self.base_mut().get_tree().get_nodes_in_group("enemy");
+        let bosses = self.base_mut().get_tree().get_nodes_in_group("boss");
         let mut nearest: Option<(f32, Vector2)> = None;
-        for enemy in enemies.iter_shared() {
-            if let Ok(body) = enemy.try_cast::<CharacterBody2D>() {
+        for boss in bosses.iter_shared() {
+            if let Ok(body) = boss.try_cast::<CharacterBody2D>() {
                 let epos = body.get_global_position();
                 let dist = my_pos.distance_to(epos);
-                if dist <= FEAR_RADIUS
-                    && nearest.is_none_or(|(d, _)| dist < d) {
-                        nearest = Some((dist, epos));
-                    }
+                if dist <= FEAR_RADIUS && nearest.is_none_or(|(d, _)| dist < d) {
+                    nearest = Some((dist, epos));
+                }
             }
         }
         nearest.map(|(_, pos)| pos)
@@ -288,13 +329,4 @@ impl Priest {
         }
         self.base_mut().move_and_slide();
     }
-}
-
-fn pseudo_rand() -> f32 {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let t = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .subsec_nanos();
-    (t % 10_000) as f32 / 10_000.0
 }

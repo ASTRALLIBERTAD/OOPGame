@@ -2,6 +2,7 @@ use godot::classes::{AnimatedSprite2D, Area2D, CharacterBody2D, ICharacterBody2D
 use godot::obj::WithBaseField;
 use godot::prelude::*;
 use godot::tools::get_autoload_by_name;
+use rand::RngExt;
 
 use crate::entity::{Entity, HostileBehavior, MobState};
 use crate::rustplayer::Rustplayer;
@@ -66,7 +67,7 @@ impl ICharacterBody2D for CommissionedThug {
             mob_state: MobState::Idle,
             toll_demanded: false,
             toll_cooldown: 6.0,
-            toll_timer: 0.0,
+            toll_timer: 6.0,
             can_slash: true,
             slash_timer: 0.0,
         }
@@ -111,6 +112,12 @@ impl ICharacterBody2D for CommissionedThug {
             return;
         }
 
+        if self.mob_state == MobState::Idle && self.toll_demanded {
+            self.base_mut().set_velocity(Vector2::ZERO);
+            self.base_mut().move_and_slide();
+            return;
+        }
+
         if self.corruption_level < 5 && !self.toll_demanded && self.toll_amount > 0 {
             self.tick_toll_demand(delta);
             return;
@@ -136,6 +143,26 @@ impl Entity for CommissionedThug {
         self.health = (self.health - amount).max(0);
         if !self.is_alive() {
             self.mob_state = MobState::Dead;
+
+            let mut rng = rand::rng();
+            let multiplier: f32 = rng.random_range(0.3..=2.0);
+            let drop = ((self.toll_amount as f32 * multiplier) as i32).max(1);
+
+            let mut pos = self.base_mut().get_global_position();
+            let random_x: f32 = rng.random_range(-50.0..=50.0);
+            let random_y: f32 = rng.random_range(-50.0..=50.0);
+            pos += Vector2::new(random_x, random_y);
+
+            let mut event_bus = get_autoload_by_name::<Node>("EventBus");
+            event_bus.call(
+                "emit_signal",
+                &[
+                    Variant::from(GString::from("piso_dropped")),
+                    Variant::from(drop),
+                    Variant::from(pos),
+                ],
+            );
+
             self.base_mut().queue_free();
         }
     }
@@ -174,9 +201,6 @@ impl HostileBehavior for CommissionedThug {
 
 #[godot_api]
 impl CommissionedThug {
-    #[signal]
-    fn toll_demanded(amount: i32);
-
     fn tick_toll_demand(&mut self, delta: f64) {
         self.toll_timer += delta;
         if self.toll_timer >= self.toll_cooldown {
@@ -199,6 +223,7 @@ impl CommissionedThug {
     #[func]
     pub fn on_toll_paid(&mut self) {
         godot_print!("Komisyon Goon: 'Move along.'");
+        self.toll_demanded = true;
         self.mob_state = MobState::Idle;
         self.base_mut().set_velocity(Vector2::ZERO);
     }
@@ -207,6 +232,7 @@ impl CommissionedThug {
     pub fn on_toll_refused(&mut self) {
         self.toll_demanded = true;
         self.attack_damage += 2;
+        self.mob_state = MobState::Aggro;
         godot_print!("Komisyon Goon: 'Your loss.'");
     }
 

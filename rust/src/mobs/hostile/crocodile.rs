@@ -332,28 +332,21 @@ impl Crocodile {
     fn on_death(&mut self) {
         godot_print!("The Buwaya falls... but the system remains.");
         let pos = self.base_mut().get_global_position();
-        self.base_mut().emit_signal(
-            "drop_item",
-            &[
-                Variant::from(GString::from("barong_of_authority")),
-                Variant::from(pos),
-            ],
+        let mut event_bus = get_autoload_by_name::<Node>("EventBus");
+        for item_id in ["barong_of_authority", "seal_of_reform", "black_ledger"] {
+            event_bus.call(
+                "emit_signal",
+                &[
+                    Variant::from(GString::from("item_dropped")),
+                    Variant::from(GString::from(item_id)),
+                    Variant::from(pos),
+                ],
+            );
+        }
+        event_bus.call(
+            "emit_signal",
+            &[Variant::from(GString::from("boss_defeated"))],
         );
-        self.base_mut().emit_signal(
-            "drop_item",
-            &[
-                Variant::from(GString::from("seal_of_reform")),
-                Variant::from(pos),
-            ],
-        );
-        self.base_mut().emit_signal(
-            "drop_item",
-            &[
-                Variant::from(GString::from("black_ledger")),
-                Variant::from(pos),
-            ],
-        );
-        self.base_mut().emit_signal("boss_defeated", &[]);
     }
 
     fn spawn_corruption_tiles(&mut self) {

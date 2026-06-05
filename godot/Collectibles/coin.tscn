@@ -1,115 +1,22 @@
-[gd_scene format=3 uid="uid://v2h65dti34ep"]
+[gd_scene format=3 uid="uid://cjxpi5312ks31"]
 
-[ext_resource type="Script" uid="uid://ia6topecv0hu" path="res://Collectibles/coin.gd" id="1_7ay75"]
-[ext_resource type="Texture2D" uid="uid://bfn6ao6636v6v" path="res://Assets/brackeys_platformer_assets/brackeys_platformer_assets/sprites/coin.png" id="2_ks7qo"]
+[ext_resource type="Script" uid="uid://b5q86n4nelwik" path="res://Collectibles/items/items_script.gd" id="1_0ysi1"]
+[ext_resource type="Collectibles" uid="uid://bl3ofqt0udho1" path="res://Collectibles/items/sword.res" id="2_4f8x2"]
+[ext_resource type="Texture2D" uid="uid://7bng6bxl2g53" path="res://Assets/Sprout Lands - Sprites - Basic pack/Objects/Egg_item.png" id="3_qnf5l"]
 
-[sub_resource type="AtlasTexture" id="AtlasTexture_uo3sp"]
-atlas = ExtResource("2_ks7qo")
-region = Rect2(0, 0, 16, 16)
+[sub_resource type="CircleShape2D" id="CircleShape2D_85vga"]
+radius = 21.095
 
-[sub_resource type="AtlasTexture" id="AtlasTexture_i248w"]
-atlas = ExtResource("2_ks7qo")
-region = Rect2(16, 0, 16, 16)
+[node name="coin" type="StaticBody2D" unique_id=2140269990]
+script = ExtResource("1_0ysi1")
+item = ExtResource("2_4f8x2")
 
-[sub_resource type="AtlasTexture" id="AtlasTexture_wi1nt"]
-atlas = ExtResource("2_ks7qo")
-region = Rect2(32, 0, 16, 16)
+[node name="Sprite2D" type="Sprite2D" parent="." unique_id=1702667475]
+texture = ExtResource("3_qnf5l")
 
-[sub_resource type="AtlasTexture" id="AtlasTexture_wd505"]
-atlas = ExtResource("2_ks7qo")
-region = Rect2(48, 0, 16, 16)
+[node name="Area2D" type="Area2D" parent="." unique_id=1759157418]
 
-[sub_resource type="AtlasTexture" id="AtlasTexture_lcsgx"]
-atlas = ExtResource("2_ks7qo")
-region = Rect2(64, 0, 16, 16)
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Area2D" unique_id=1629425885]
+shape = SubResource("CircleShape2D_85vga")
 
-[sub_resource type="AtlasTexture" id="AtlasTexture_cvdql"]
-atlas = ExtResource("2_ks7qo")
-region = Rect2(80, 0, 16, 16)
-
-[sub_resource type="AtlasTexture" id="AtlasTexture_k1v3o"]
-atlas = ExtResource("2_ks7qo")
-region = Rect2(96, 0, 16, 16)
-
-[sub_resource type="AtlasTexture" id="AtlasTexture_k6dff"]
-atlas = ExtResource("2_ks7qo")
-region = Rect2(112, 0, 16, 16)
-
-[sub_resource type="AtlasTexture" id="AtlasTexture_ee1ck"]
-atlas = ExtResource("2_ks7qo")
-region = Rect2(128, 0, 16, 16)
-
-[sub_resource type="AtlasTexture" id="AtlasTexture_npqsq"]
-atlas = ExtResource("2_ks7qo")
-region = Rect2(144, 0, 16, 16)
-
-[sub_resource type="AtlasTexture" id="AtlasTexture_lrfvs"]
-atlas = ExtResource("2_ks7qo")
-region = Rect2(160, 0, 16, 16)
-
-[sub_resource type="AtlasTexture" id="AtlasTexture_133mh"]
-atlas = ExtResource("2_ks7qo")
-region = Rect2(176, 0, 16, 16)
-
-[sub_resource type="SpriteFrames" id="SpriteFrames_c0u5d"]
-animations = [{
-"frames": [{
-"duration": 1.0,
-"texture": SubResource("AtlasTexture_uo3sp")
-}, {
-"duration": 1.0,
-"texture": SubResource("AtlasTexture_i248w")
-}, {
-"duration": 1.0,
-"texture": SubResource("AtlasTexture_wi1nt")
-}, {
-"duration": 1.0,
-"texture": SubResource("AtlasTexture_wd505")
-}, {
-"duration": 1.0,
-"texture": SubResource("AtlasTexture_lcsgx")
-}, {
-"duration": 1.0,
-"texture": SubResource("AtlasTexture_cvdql")
-}, {
-"duration": 1.0,
-"texture": SubResource("AtlasTexture_k1v3o")
-}, {
-"duration": 1.0,
-"texture": SubResource("AtlasTexture_k6dff")
-}, {
-"duration": 1.0,
-"texture": SubResource("AtlasTexture_ee1ck")
-}, {
-"duration": 1.0,
-"texture": SubResource("AtlasTexture_npqsq")
-}, {
-"duration": 1.0,
-"texture": SubResource("AtlasTexture_lrfvs")
-}, {
-"duration": 1.0,
-"texture": SubResource("AtlasTexture_133mh")
-}],
-"loop": true,
-"name": &"rotatingcoin",
-"speed": 8.0
-}]
-
-[sub_resource type="CircleShape2D" id="CircleShape2D_sv7wk"]
-radius = 7.2111
-
-[node name="coin" type="Area2D" unique_id=1906829267]
-position = Vector2(117, 0)
-script = ExtResource("1_7ay75")
-
-[node name="AnimatedSprite2D" type="AnimatedSprite2D" parent="." unique_id=1750882428]
-texture_filter = 1
-sprite_frames = SubResource("SpriteFrames_c0u5d")
-animation = &"rotatingcoin"
-autoplay = "rotatingcoin"
-frame_progress = 0.817
-
-[node name="CollisionShape2D" type="CollisionShape2D" parent="." unique_id=371768657]
-shape = SubResource("CircleShape2D_sv7wk")
-
-[connection signal="body_entered" from="." to="." method="_on_body_entered"]
+[connection signal="body_entered" from="Area2D" to="." method="_on_area_2d_body_entered"]

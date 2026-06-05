@@ -1,4 +1,5 @@
 mod armor_system;
+mod biome;
 pub mod entity;
 mod example;
 pub mod heart;

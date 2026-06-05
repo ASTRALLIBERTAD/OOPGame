@@ -199,10 +199,7 @@ impl Ofw {
 
         self.box_opened = true;
 
-        let tree = match self.base_mut().get_tree() {
-            Some(t) => t,
-            None => return,
-        };
+        let tree = self.base_mut().get_tree();
         let players = tree.get_nodes_in_group("player");
 
         for node in players.iter_shared() {
@@ -272,11 +269,10 @@ impl Ofw {
             if let Ok(body) = enemy.try_cast::<CharacterBody2D>() {
                 let epos = body.get_global_position();
                 let dist = my_pos.distance_to(epos);
-                if dist <= FEAR_RADIUS {
-                    if nearest.map_or(true, |(d, _)| dist < d) {
+                if dist <= FEAR_RADIUS
+                    && nearest.is_none_or(|(d, _)| dist < d) {
                         nearest = Some((dist, epos));
                     }
-                }
             }
         }
         nearest.map(|(_, pos)| pos)

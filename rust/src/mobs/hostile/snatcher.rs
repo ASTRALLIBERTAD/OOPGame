@@ -1,6 +1,7 @@
 use godot::classes::{AnimatedSprite2D, CharacterBody2D, ICharacterBody2D};
 use godot::obj::WithBaseField;
 use godot::prelude::*;
+use godot::tools::get_autoload_by_name;
 
 use crate::entity::{Entity, HostileBehavior, MobState};
 use crate::rustplayer::Rustplayer;
@@ -32,6 +33,7 @@ pub struct Snatcher {
 
     mob_state: MobState,
     has_stolen: bool,
+    stole_piso_successfully: bool,
     flee_target: Option<Vector2>,
 }
 
@@ -42,12 +44,13 @@ impl ICharacterBody2D for Snatcher {
             base,
             sprite: OnEditor::default(),
             health: 15,
-            speed: 150.0,
-            aggro_range: 180.0,
+            speed: 50.0,
+            aggro_range: 120.0,
             steal_amount: 50,
-            steal_range: 30.0,
+            steal_range: 20.0,
             mob_state: MobState::Idle,
             has_stolen: false,
+            stole_piso_successfully: false,
             flee_target: None,
         }
     }
@@ -114,16 +117,18 @@ impl Entity for Snatcher {
     fn take_damage(&mut self, amount: i32) {
         self.health = (self.health - amount).max(0);
         if !self.is_alive() {
-            if self.has_stolen {
+            if self.has_stolen && self.stole_piso_successfully {
                 let steal_amount = self.steal_amount;
-                self.base_mut()
-                    .emit_signal("drop_stolen_piso", &[Variant::from(steal_amount)]);
+                let pos = self.base_mut().get_global_position();
+                self.base_mut().emit_signal(
+                    "drop_stolen_piso",
+                    &[Variant::from(steal_amount), Variant::from(pos)],
+                );
             }
             self.mob_state = MobState::Dead;
             self.base_mut().queue_free();
         }
     }
-
     fn heal(&mut self, amount: i32) {
         self.health = (self.health + amount).min(15);
     }
@@ -155,16 +160,34 @@ impl Snatcher {
     fn piso_stolen(amount: i32);
 
     #[signal]
-    fn drop_stolen_piso(amount: i32);
+    fn drop_stolen_piso(amount: i32, position: Vector2);
 
     fn try_steal(&mut self, player: &mut godot::obj::GdMut<Rustplayer>) {
         if self.has_stolen {
             return;
         }
+
         let steal_amount = self.steal_amount;
-        self.base_mut()
-            .emit_signal("piso_stolen", &[Variant::from(steal_amount)]);
-        godot_print!("Snatcher stole {} piso!", self.steal_amount);
+        let had_piso = player.spend_piso(steal_amount);
+        self.stole_piso_successfully = had_piso;
+
+        let msg = if had_piso {
+            self.base_mut()
+                .emit_signal("piso_stolen", &[Variant::from(steal_amount)]);
+            format!("Snatcher stole {} piso!", steal_amount)
+        } else {
+            "Snatcher tried to steal but player had no piso.".to_string()
+        };
+
+        let mut event_bus = get_autoload_by_name::<Node>("EventBus");
+        event_bus.call(
+            "emit_signal",
+            &[
+                Variant::from(GString::from("message")),
+                Variant::from(GString::from(&msg.clone())),
+            ],
+        );
+        godot_print!("{}", msg);
 
         self.has_stolen = true;
 
@@ -173,7 +196,6 @@ impl Snatcher {
         let away = (my_pos - player_pos).normalized();
         self.flee_target = Some(my_pos + away * 600.0);
     }
-
     #[func]
     pub fn set_health(&mut self, health: i32) {
         self.health = health.clamp(0, 15);

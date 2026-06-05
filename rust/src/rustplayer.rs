@@ -83,6 +83,8 @@ pub struct Rustplayer {
 
     arrested: bool,
     arrested_timer: f64,
+
+    piso: i32,
 }
 
 #[godot_api]
@@ -118,6 +120,8 @@ impl ICharacterBody2D for Rustplayer {
 
             arrested: false,
             arrested_timer: 0.0,
+
+            piso: 200,
         }
     }
 
@@ -129,6 +133,12 @@ impl ICharacterBody2D for Rustplayer {
 
         godot_print!("Player ID is : {}", self.id);
         let is_authority = self.base_mut().is_multiplayer_authority();
+
+        let mut label_piso = self
+            .base()
+            .get_node_as::<Label>("Control/CanvasLayer/VBoxContainer/piso");
+        let piso = self.piso.to_string();
+        label_piso.set_text(&piso);
 
         if !is_authority {
             self.camera.make_current();
@@ -247,6 +257,11 @@ impl Entity for Rustplayer {
 
 #[godot_api]
 impl Rustplayer {
+    #[signal]
+    fn message(text: String);
+    #[signal]
+    fn piso_changed(new_total: i32);
+
     #[rpc(unreliable, any_peer)]
     fn update_position(&mut self, pos: Vector2) {
         self.target_position = pos;
@@ -436,9 +451,29 @@ impl Rustplayer {
             {
                 troll.bind_mut().take_damage(damage);
             } else if let Ok(mut order_force) =
-                body.try_cast::<crate::mobs::hostile::order_force::OrderForce>()
+                body.clone()
+                    .try_cast::<crate::mobs::hostile::order_force::OrderForce>()
             {
                 order_force.bind_mut().take_damage(damage);
+            } else if let Ok(mut thug) =
+                body.clone()
+                    .try_cast::<crate::mobs::hostile::commissioned_thug::CommissionedThug>()
+            {
+                thug.bind_mut().take_damage(damage);
+            } else if let Ok(mut snatcher) = body
+                .clone()
+                .try_cast::<crate::mobs::hostile::snatcher::Snatcher>()
+            {
+                snatcher.bind_mut().take_damage(damage);
+            } else if let Ok(mut broker) =
+                body.clone()
+                    .try_cast::<crate::mobs::hostile::corruption_broker::CorruptionBroker>()
+            {
+                broker.bind_mut().take_damage(damage);
+            } else if let Ok(mut vessel) =
+                body.try_cast::<crate::mobs::hostile::smuggler_vessel::SmuglerVessel>()
+            {
+                vessel.bind_mut().take_damage(damage);
             }
         }
     }
@@ -453,6 +488,11 @@ impl Rustplayer {
             INDEBTED_DURATION
         );
     }
+
+    // pub fn notify(&mut self, text: &str) {
+    //     self.base_mut()
+    //         .emit_signal("message", &[Variant::from(GString::from(text))]);
+    // }
 
     #[func]
     pub fn is_indebted(&self) -> bool {
@@ -489,5 +529,50 @@ impl Rustplayer {
     #[func]
     pub fn get_heart_ui(&self) -> Gd<Heart> {
         self.heart_ui.clone()
+    }
+}
+
+#[godot_api(secondary)]
+impl Rustplayer {
+    #[func]
+    pub fn get_piso(&self) -> i32 {
+        self.piso
+    }
+
+    #[func]
+    pub fn add_piso(&mut self, amount: i32) {
+        self.piso = (self.piso + amount).max(0);
+        let piso = self.piso;
+        self.base_mut()
+            .emit_signal("piso_changed", &[Variant::from(piso)]);
+        godot_print!("Piso +{}. Total: {}", amount, piso);
+    }
+
+    #[func]
+    pub fn spend_piso(&mut self, amount: i32) -> bool {
+        if self.piso < amount {
+            godot_print!("Not enough piso. Have {}, need {}.", self.piso, amount);
+            return false;
+        }
+        self.piso -= amount;
+        let piso = self.piso;
+        self.base_mut()
+            .emit_signal("piso_changed", &[Variant::from(piso)]);
+        godot_print!("Piso -{}. Total: {}", amount, piso);
+        true
+    }
+
+    #[func]
+    pub fn set_piso(&mut self, amount: i32) {
+        self.piso = amount.max(0);
+        let piso = self.piso;
+        let mut event_bus = get_autoload_by_name::<Node>("EventBus");
+        event_bus.call(
+            "emit_signal",
+            &[
+                Variant::from(GString::from("piso_changed")),
+                Variant::from(piso),
+            ],
+        );
     }
 }

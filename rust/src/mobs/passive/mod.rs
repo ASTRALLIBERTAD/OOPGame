@@ -1,3 +1,3 @@
 mod farmer;
-// mod ofw;
-// mod priest;
+mod ofw;
+mod priest;

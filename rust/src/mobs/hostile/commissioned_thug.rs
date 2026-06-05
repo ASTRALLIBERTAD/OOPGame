@@ -1,6 +1,7 @@
 use godot::classes::{AnimatedSprite2D, Area2D, CharacterBody2D, ICharacterBody2D};
 use godot::obj::WithBaseField;
 use godot::prelude::*;
+use godot::tools::get_autoload_by_name;
 
 use crate::entity::{Entity, HostileBehavior, MobState};
 use crate::rustplayer::Rustplayer;
@@ -180,14 +181,18 @@ impl CommissionedThug {
         self.toll_timer += delta;
         if self.toll_timer >= self.toll_cooldown {
             self.toll_timer = 0.0;
-            let toll_amount = self.toll_amount;
-            self.base_mut()
-                .emit_signal("toll_demanded", &[Variant::from(toll_amount)]);
-            godot_print!(
-                "Komisyon Goon: 'Pay {} piso before you pass.'",
-                self.toll_amount
-            );
             self.toll_demanded = true;
+            let mut event_bus = get_autoload_by_name::<Node>("EventBus");
+            let self_node = self.base().clone().upcast::<Node>();
+            event_bus.call(
+                "emit_signal",
+                &[
+                    Variant::from(GString::from("bribe_requested")),
+                    Variant::from(GString::from("toll")),
+                    Variant::from(self.toll_amount),
+                    Variant::from(self_node),
+                ],
+            );
         }
     }
 

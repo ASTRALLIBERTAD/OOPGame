@@ -1,6 +1,6 @@
 extends Panel
-@onready var item_visual: Sprite2D = $CenterContainer/Panel/item
-@onready var amount_text: Label = $CenterContainer/Panel/Label
+@onready var _item_visual: Sprite2D = $CenterContainer/Panel/item
+@onready var _amount_text: Label = $CenterContainer/Panel/Label
 
 signal out
 
@@ -8,24 +8,24 @@ func _ready() -> void:
 	out.emit()
 
 func update(slot: InvSlot):
-	redraw(slot)
+	_redraw(slot)
 	if !slot.item.name:
-		item_visual.visible= false
-		amount_text.visible = false
-		amount_text.text = str(0)
+		_item_visual.visible= false
+		_amount_text.visible = false
+		_amount_text.text = str(0)
 	else:
-		item_visual.visible = true
-		item_visual.texture = slot.item.icon
+		_item_visual.visible = true
+		_item_visual.texture = slot.item.icon
 		if slot.item.amount > 1:
-			amount_text.visible = true
+			_amount_text.visible = true
 			var t = slot.item.amount
-			amount_text.text = str(t)
+			_amount_text.text = str(t)
 
-func redraw(slot: InvSlot):
+func _redraw(slot: InvSlot):
 	if slot.get_item().amount <= 1:
-		amount_text.visible = false
+		_amount_text.visible = false
 		var t = slot.item.amount
-		amount_text.text = str(t)
+		_amount_text.text = str(t)
 
 func _on_button_pressed() -> void:
 	out.emit()

@@ -16,7 +16,7 @@ struct PlayerData {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct SaveGameInfo {
+struct SaveGameInfo {
     #[serde(rename = "dateTime")]
     date_time: f64,
     #[serde(rename = "imgPath")]
@@ -25,9 +25,16 @@ pub struct SaveGameInfo {
     seed: i32,
 }
 
+#[derive(Serialize, Deserialize, Clone)]
+struct ConfigSettings {
+    #[serde(rename = "playerName")]
+    player_name: String,
+    volume: f32,
+}
+
 #[derive(GodotClass)]
 #[class(base = Node, init)]
-pub struct SaveManagerRust {
+struct SaveManagerRust {
     #[base]
     base: Base<Node>,
 
@@ -44,7 +51,7 @@ pub struct SaveManagerRust {
 #[godot_api]
 impl SaveManagerRust {
     #[func]
-    pub fn get_os(&self) -> String {
+    fn get_os(&self) -> String {
         let mut baser: &str = "";
         if OS == "windows" {
             baser = "user://";
@@ -61,8 +68,7 @@ impl SaveManagerRust {
     }
 
     #[func]
-    pub fn save_game_rust(&mut self, name: String) {
-        // self.load_game = name.clone().to_godot();
+    fn save_game_rust(&mut self, name: String) {
         self.current_world_name = StringName::from(&name);
 
         let base_path = &self.get_os();
@@ -116,7 +122,6 @@ impl SaveManagerRust {
                 match bincode::serialize(&player_position) {
                     Ok(serialized_data) => {
                         if serialized_data.len() <= 1048576 {
-                            // size limit (4KB)
                             let byte_array = PackedByteArray::from(serialized_data);
                             file.store_buffer(&byte_array);
                             godot_print!("Game saved successfully at {}", save_path);
@@ -186,7 +191,6 @@ impl SaveManagerRust {
 
             let data_slice: &[u8] = data.as_slice();
 
-            // Deserialize the player position data
             match bincode::deserialize::<PlayerData>(data_slice) {
                 Ok(player_data) => {
                     let Some(mut player) = self.get_player() else {
@@ -260,7 +264,6 @@ impl SaveManagerRust {
 
         if let Some(mut dir) = godot::classes::DirAccess::open(&save_path) {
             if dir.dir_exists(&save_path) {
-                // Call recursive delete
                 if self.delete_directory_recursive(&save_path) {
                     godot_print!("Save game '{}' deleted successfully.", name);
                 } else {
@@ -274,7 +277,6 @@ impl SaveManagerRust {
         }
     }
 
-    /// Recursively deletes a directory and its contents.
     fn delete_directory_recursive(&self, path: &str) -> bool {
         if let Some(mut dir) = godot::classes::DirAccess::open(path) {
             dir.list_dir_begin();
@@ -282,7 +284,7 @@ impl SaveManagerRust {
             loop {
                 let entry = dir.get_next();
                 if entry.is_empty() {
-                    break; // no more entries
+                    break;
                 }
 
                 if entry == "." || entry == ".." {
@@ -292,7 +294,6 @@ impl SaveManagerRust {
                 let full_path = format!("{}/{}", path, entry);
 
                 if dir.current_is_dir() {
-                    // recursive call
                     if !self.delete_directory_recursive(&full_path) {
                         return false;
                     }
@@ -303,7 +304,6 @@ impl SaveManagerRust {
 
             dir.list_dir_end();
 
-            // Now delete the empty directory itself
             if let Some(mut parent) = godot::classes::DirAccess::open(
                 std::path::Path::new(path)
                     .parent()
@@ -361,12 +361,10 @@ impl SaveManagerRust {
                 godot_error!("Failed to open save file at {}", save_path);
             }
         }
-
-        // let save_game_json = Json::stringify_ex().done();
     }
 
     #[func]
-    pub fn set_player_health(&mut self, health: i32) {
+    fn set_player_health(&mut self, health: i32) {
         if let Some(mut player) = self.get_player() {
             player.bind_mut().set_health(health);
         }
@@ -392,5 +390,59 @@ impl SaveManagerRust {
     #[func]
     fn get_seed(&self) -> i32 {
         self.world_seed
+    }
+
+    #[func]
+    fn save_config_json(&self, player_name: String, volume: f32) {
+        let base_path = self.get_os();
+        let config_path = format!("{}/config.json", base_path);
+
+        let settings = ConfigSettings {
+            player_name,
+            volume,
+        };
+
+        match FileAccess::open(&config_path, ModeFlags::WRITE) {
+            Some(mut file) => match serde_json::to_string(&settings) {
+                Ok(json_string) => {
+                    file.store_string(&json_string);
+                    godot_print!("Config settings saved successfully at {}", config_path);
+                }
+                Err(e) => {
+                    godot_error!("Failed to serialize config json: {}", e);
+                }
+            },
+            None => {
+                godot_error!("Failed to create config file at {}", config_path);
+            }
+        }
+    }
+
+    #[func]
+    fn get_config_player_name(&self) -> String {
+        let base_path = self.get_os();
+        let config_path = format!("{}/config.json", base_path);
+
+        if let Some(file) = FileAccess::open(&config_path, ModeFlags::READ) {
+            let json_string = file.get_as_text().to_string();
+            if let Ok(settings) = serde_json::from_str::<ConfigSettings>(&json_string) {
+                return settings.player_name;
+            }
+        }
+        "ASTRAL".to_string()
+    }
+
+    #[func]
+    fn get_config_volume(&self) -> f32 {
+        let base_path = self.get_os();
+        let config_path = format!("{}/config.json", base_path);
+
+        if let Some(file) = FileAccess::open(&config_path, ModeFlags::READ) {
+            let json_string = file.get_as_text().to_string();
+            if let Ok(settings) = serde_json::from_str::<ConfigSettings>(&json_string) {
+                return settings.volume;
+            }
+        }
+        50.0 // Default fallback value
     }
 }

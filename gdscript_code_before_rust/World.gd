@@ -1,25 +1,25 @@
 extends Node2D
-@onready var tile_set = $Terrain1
+@onready var _tile_set = $Terrain1
 
 
 func _ready() -> void:
 	$AutoSave.start()
 
-	
+
 
 func _process(delta: float) -> void:
-	var tile_cord = player_cord()
+	var tile_cord = _player_cord()
 	%coords.text = "Coordinates: %d,%d" % [tile_cord.x, tile_cord.y * -1]
-	
-	
+
+
 
 func _on_auto_save_timeout() -> void:
 	SaveManager.auto_save()
 	pass # Replace with function body.
 
-func player_cord():
-	var cord = tile_set.local_to_map($PLAYERS.global_position)
-	var local_position = tile_set.to_local(cord)
+func _player_cord():
+	var cord = _tile_set.local_to_map($PLAYERS.global_position)
+	var local_position = _tile_set.to_local(cord)
 	return local_position
 	#done in Rust
 	pass
@@ -36,10 +36,10 @@ func _on_loading_pressed() -> void:
 	print(OS.get_user_data_dir())
 	var yt = SaveManager.get_os()
 	$po.text = yt
-	
+
 	$osl.text = OS.get_name()
 	get_tree().paused = false
-	pass 
+	pass
 
 
 func _on_saving_time_timeout() -> void:

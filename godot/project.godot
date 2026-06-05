@@ -24,6 +24,7 @@ config/icon="res://Assets/PixelUIButtons/PlayButton.png"
 
 RustSaveManager1="*res://SaveAndLoad/save_manager_rust.scn"
 GlobalNodeManager="*res://autoloads/NodeManager.tscn"
+EventBus="*uid://uto40usis8fy"
 
 [display]
 

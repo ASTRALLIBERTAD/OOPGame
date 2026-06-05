@@ -8,6 +8,7 @@ func _ready():
 
 func _on_food_ready(position: Vector2) -> void:
 	spawn_item("palay", position)
+
 func _on_balikbayan_box_dropped(position: Vector2) -> void:
 	spawn_item("Objects/Box", position)
 

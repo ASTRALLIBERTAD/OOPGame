@@ -1,5 +1,4 @@
-mod armor_inventory;
-mod armor_piece;
+mod armor_system;
 pub mod entity;
 mod example;
 pub mod heart;

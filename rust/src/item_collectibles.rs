@@ -1,7 +1,18 @@
 use godot::classes::{IResource, Resource, Texture2D};
 use godot::prelude::*;
 
-use crate::armor_piece::ArmorPiece;
+#[derive(GodotConvert, Var, Export, Default, Clone)]
+#[godot(via = GString)]
+pub enum ItemType {
+    #[default]
+    Generic,
+    Helmet,
+    BodyArmor,
+    Leggings,
+    Boots,
+    Weapon,
+    Consumable,
+}
 
 #[derive(GodotClass)]
 #[class(base = Resource)]
@@ -23,12 +34,30 @@ pub struct Collectibles {
     #[var(get = is_stackable)]
     stackable: bool,
 
-    /// Optional link to the armor stats this item grants when equipped.
-    /// `None` for ordinary (non-armor) collectibles.
-    #[export]
-    armor_piece: Option<Gd<ArmorPiece>>,
     #[export]
     base_price: i32,
+
+    #[export]
+    item_type: ItemType,
+
+    #[export]
+    #[export_group(name = "Combat Stats")]
+    #[var(get = get_defense)]
+    defense: i32,
+
+    #[export]
+    #[export_group(name = "Combat Stats")]
+    attack_power: i32,
+
+    #[export]
+    #[export_group(name = "Combat Stats")]
+    #[var(get = get_speed_modifier)]
+    speed_modifier: f32,
+
+    #[export]
+    #[export_group(name = "Equipment Condition")]
+    #[var(get = get_durability, set = set_durability)]
+    durability: i32,
 }
 
 #[godot_api]
@@ -40,8 +69,12 @@ impl IResource for Collectibles {
             amount: 1,
             icon: None,
             stackable: bool::default(),
-            armor_piece: None,
             base_price: 0,
+            item_type: ItemType::Generic,
+            defense: 0,
+            attack_power: 0,
+            speed_modifier: 0.0,
+            durability: 0,
         }
     }
 }
@@ -52,6 +85,7 @@ impl Collectibles {
     pub fn get_name(&self) -> GString {
         self.name.clone()
     }
+
     #[func]
     pub fn get_amount(&self) -> i32 {
         self.amount
@@ -67,13 +101,23 @@ impl Collectibles {
         self.stackable
     }
 
-    /// `true` when this collectible is an equippable armor piece.
-    ///
-    /// Pair with the `#[export]`-generated `get_armor_piece()` getter (which
-    /// returns the `ArmorPiece`, or null for non-armor items) — always gate that
-    /// call behind `is_armor()` on the GDScript side to avoid a null deref.
     #[func]
-    pub fn is_armor(&self) -> bool {
-        self.armor_piece.is_some()
+    pub fn get_defense(&self) -> i32 {
+        self.defense
+    }
+
+    #[func]
+    pub fn get_speed_modifier(&self) -> f32 {
+        self.speed_modifier
+    }
+
+    #[func]
+    pub fn get_durability(&self) -> i32 {
+        self.durability
+    }
+
+    #[func]
+    pub fn set_durability(&mut self, value: i32) {
+        self.durability = value;
     }
 }

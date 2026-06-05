@@ -1,0 +1,122 @@
+[gd_scene format=3 uid="uid://bsdnf2sv0cc1i"]
+
+[ext_resource type="Script" uid="uid://cissxsc8d3c07" path="res://UserInterface/item_slot.gd" id="1_gnhaq"]
+[ext_resource type="Texture2D" uid="uid://cq7rggbkxhy3y" path="res://Assets/PixelUIButtons/Panel.png" id="2_le6sy"]
+[ext_resource type="PackedScene" uid="uid://dlpy31hg2nhti" path="res://Collectibles/inventory_scene/inv_ui_slot.scn" id="3_u38w1"]
+
+[node name="ItemSlot" type="Control" unique_id=1690977097]
+custom_minimum_size = Vector2(1154, 648)
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+mouse_filter = 1
+script = ExtResource("1_gnhaq")
+
+[node name="DropButton" type="Button" parent="." unique_id=417576094]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+text = "
+"
+
+[node name="VBoxContainer" type="VBoxContainer" parent="." unique_id=949049504]
+layout_mode = 0
+offset_right = 135.0
+offset_bottom = 552.0
+
+[node name="inv_UI_slot13" parent="VBoxContainer" unique_id=1653367658 instance=ExtResource("3_u38w1")]
+layout_mode = 2
+
+[node name="inv_UI_slot14" parent="VBoxContainer" unique_id=484520154 instance=ExtResource("3_u38w1")]
+layout_mode = 2
+
+[node name="inv_UI_slot15" parent="VBoxContainer" unique_id=1191408790 instance=ExtResource("3_u38w1")]
+layout_mode = 2
+
+[node name="inv_UI_slot16" parent="VBoxContainer" unique_id=1702274114 instance=ExtResource("3_u38w1")]
+layout_mode = 2
+
+[node name="NinePatchRect" type="NinePatchRect" parent="." unique_id=1365467830]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -3.0
+offset_top = -3.0
+offset_right = 3.0
+offset_bottom = 3.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 1
+texture = ExtResource("2_le6sy")
+patch_margin_left = 3
+patch_margin_top = 3
+patch_margin_right = 3
+patch_margin_bottom = 3
+
+[node name="GridContainer" type="GridContainer" parent="NinePatchRect" unique_id=242779216]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -276.0
+offset_top = -206.5
+offset_right = 276.0
+offset_bottom = 206.5
+grow_horizontal = 2
+grow_vertical = 2
+columns = 4
+
+[node name="inv_UI_slot1" parent="NinePatchRect/GridContainer" unique_id=200279008 instance=ExtResource("3_u38w1")]
+layout_mode = 2
+
+[node name="inv_UI_slot2" parent="NinePatchRect/GridContainer" unique_id=1989451813 instance=ExtResource("3_u38w1")]
+layout_mode = 2
+
+[node name="inv_UI_slot3" parent="NinePatchRect/GridContainer" unique_id=1294933459 instance=ExtResource("3_u38w1")]
+layout_mode = 2
+
+[node name="inv_UI_slot4" parent="NinePatchRect/GridContainer" unique_id=1459792237 instance=ExtResource("3_u38w1")]
+layout_mode = 2
+
+[node name="inv_UI_slot5" parent="NinePatchRect/GridContainer" unique_id=91007073 instance=ExtResource("3_u38w1")]
+layout_mode = 2
+
+[node name="inv_UI_slot6" parent="NinePatchRect/GridContainer" unique_id=745488104 instance=ExtResource("3_u38w1")]
+layout_mode = 2
+
+[node name="inv_UI_slot7" parent="NinePatchRect/GridContainer" unique_id=241422909 instance=ExtResource("3_u38w1")]
+layout_mode = 2
+
+[node name="inv_UI_slot8" parent="NinePatchRect/GridContainer" unique_id=1091882239 instance=ExtResource("3_u38w1")]
+layout_mode = 2
+
+[node name="inv_UI_slot9" parent="NinePatchRect/GridContainer" unique_id=1789578908 instance=ExtResource("3_u38w1")]
+layout_mode = 2
+
+[node name="inv_UI_slot10" parent="NinePatchRect/GridContainer" unique_id=312372539 instance=ExtResource("3_u38w1")]
+layout_mode = 2
+
+[node name="inv_UI_slot11" parent="NinePatchRect/GridContainer" unique_id=1255288957 instance=ExtResource("3_u38w1")]
+layout_mode = 2
+
+[node name="inv_UI_slot12" parent="NinePatchRect/GridContainer" unique_id=959805198 instance=ExtResource("3_u38w1")]
+layout_mode = 2
+
+[node name="Sprite2D" type="Sprite2D" parent="NinePatchRect" unique_id=1921837646]
+visible = false
+scale = Vector2(3, 3)
+
+[connection signal="pressed" from="DropButton" to="." method="_on_drop_button_pressed"]

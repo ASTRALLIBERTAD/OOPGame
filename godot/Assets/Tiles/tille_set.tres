@@ -173,6 +173,13 @@ texture = ExtResource("2_bdxxe")
 7:8/0 = 0
 10:0/0 = 0
 11:0/0 = 0
+6:10/0 = 0
+7:9/0 = 0
+8:8/0 = 0
+8:7/0 = 0
+8:2/0 = 0
+10:1/0 = 0
+5:4/0 = 0
 
 [sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_jpohr"]
 texture = ExtResource("3_bdxxe")

@@ -1,3 +1,4 @@
+use crate::biome;
 use crate::main_node::MainNode;
 use godot::classes::DirAccess;
 use godot::classes::{
@@ -101,6 +102,7 @@ pub struct Terrain1 {
     moisture: Gd<FastNoiseLite>,
     temperature: Gd<FastNoiseLite>,
     altitude: Gd<FastNoiseLite>,
+    biome: Gd<FastNoiseLite>,
     player_chunks: HashMap<i32, HashSet<Vector2i>>,
     player_positions: HashMap<i32, Vector2i>,
     chunk_cache: HashMap<Vector2i, ChunkData>,
@@ -132,6 +134,7 @@ impl ITileMapLayer for Terrain1 {
             moisture: FastNoiseLite::new_gd(),
             temperature: FastNoiseLite::new_gd(),
             altitude: FastNoiseLite::new_gd(),
+            biome: FastNoiseLite::new_gd(),
             player_chunks: HashMap::new(),
             player_positions: HashMap::new(),
             chunk_cache: HashMap::new(),
@@ -163,6 +166,10 @@ impl ITileMapLayer for Terrain1 {
         self.moisture.set_seed(randi() as i32);
         self.temperature.set_seed(randi() as i32);
         self.altitude.set_frequency(0.01);
+        // Biome noise: deterministic from world_seed, low frequency -> large regions.
+        self.biome
+            .set_seed(self.world_seed.wrapping_add(biome::BIOME_SEED_OFFSET));
+        self.biome.set_frequency(biome::BIOME_FREQUENCY);
         godot_print!("Terrain1 ready with seed: {}", self.world_seed);
     }
 
@@ -251,6 +258,8 @@ impl Terrain1 {
     pub fn sync_seed(&mut self, seed: i32) {
         self.world_seed = seed;
         self.altitude.set_seed(self.world_seed);
+        self.biome
+            .set_seed(self.world_seed.wrapping_add(biome::BIOME_SEED_OFFSET));
         godot_print!("Terrain1 synced callable seed: {}", seed);
     }
 
@@ -417,9 +426,15 @@ impl Terrain1 {
             for x in 0..CHUNK_SIZE {
                 let noise = noise_map[ChunkData::index(x as usize, y as usize)];
                 let (source_id, coords) = if noise < 0.1 {
+                    // Below the altitude threshold: water (unchanged).
                     (1, V2i { x: 0, y: 11 })
                 } else {
-                    (2, V2i { x: 1, y: 0 })
+                    // Land: pick this cell's Luzon biome from the biome noise.
+                    let bnoise = self
+                        .biome
+                        .get_noise_2d((start_x + x) as f32, (start_y + y) as f32);
+                    let (tx, ty) = biome::select_biome(bnoise).land_tile();
+                    (biome::BIOME_SOURCE_ID, V2i { x: tx, y: ty })
                 };
 
                 chunk.tiles[ChunkData::index(x as usize, y as usize)] = coords;

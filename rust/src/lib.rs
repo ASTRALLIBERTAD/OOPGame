@@ -1,5 +1,6 @@
 mod armor_inventory;
 mod armor_piece;
+mod biome;
 pub mod entity;
 mod example;
 pub mod heart;

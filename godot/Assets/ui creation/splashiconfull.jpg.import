@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cb3ojxi62qiwv"
-path="res://.godot/imported/mob_magnanakaw_sprite sheet.png-debd65669aff35a85447b40144140752.ctex"
+uid="uid://bky3h6guxdnux"
+path="res://.godot/imported/splashiconfull.jpg-f71f20d5a1fd4019a1fb51e98212df26.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/ui creation/mob_magnanakaw_sprite sheet.png"
-dest_files=["res://.godot/imported/mob_magnanakaw_sprite sheet.png-debd65669aff35a85447b40144140752.ctex"]
+source_file="res://Assets/ui creation/splashiconfull.jpg"
+dest_files=["res://.godot/imported/splashiconfull.jpg-f71f20d5a1fd4019a1fb51e98212df26.ctex"]
 
 [params]
 

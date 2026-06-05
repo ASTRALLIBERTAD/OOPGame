@@ -6,6 +6,7 @@ use godot::prelude::*;
 use godot::tools::get_autoload_by_name;
 use std::str::FromStr;
 
+use crate::armor_system::ArmorSystem;
 use crate::entity::Entity;
 use crate::heart::Heart;
 use crate::inv_slot::InvSlot;
@@ -33,6 +34,9 @@ pub struct Rustplayer {
 
     #[export]
     inv: OnEditor<Gd<Inventory>>,
+
+    #[export]
+    armor_system: OnEditor<Gd<ArmorSystem>>,
 
     #[export]
     item_slot: OnEditor<Gd<Control>>,
@@ -101,6 +105,7 @@ impl ICharacterBody2D for Rustplayer {
             sprite: OnEditor::default(),
             coords: OnEditor::default(),
             inv: OnEditor::default(),
+            armor_system: OnEditor::default(),
             item_slot: OnEditor::default(),
             is_open: false,
             heart_ui: OnEditor::default(),
@@ -163,7 +168,9 @@ impl ICharacterBody2D for Rustplayer {
 
     fn process(&mut self, delta: f64) {
         if self.base_mut().is_multiplayer_authority() {
-            let speed: f32 = 100.0 + self.speed_bonus;
+            let slots = self.inv.bind().get_slots();
+            let armor_speed_mod = self.armor_system.bind().total_speed_modifier(slots);
+            let speed: f32 = (100.0 + self.speed_bonus) * (1.0 + armor_speed_mod);
             let input = Input::singleton();
 
             let direction = Input::get_vector(
@@ -258,8 +265,17 @@ impl Entity for Rustplayer {
             godot_print!("Sanctuary protects the player!");
             return;
         }
-        self.health = (self.health - amount).max(0);
+        let slots = self.inv.bind().get_slots();
+        let reduction = self.armor_system.bind().total_defense(slots.clone());
+        let actual_damage = (amount - reduction).max(0);
+
+        self.armor_system.bind().damage_durability(slots, 1);
+
+        self.health = (self.health - actual_damage).max(0);
         self.heart_ui.bind_mut().set_heart_display(self.health);
+
+        self.inv.bind_mut().signals().update().emit();
+
         if !self.is_alive() {
             godot_print!("player dead");
         }
@@ -281,6 +297,7 @@ impl Rustplayer {
     #[signal]
     fn piso_changed(new_total: i32);
 
+    #[func]
     #[rpc(unreliable, any_peer)]
     fn update_position(&mut self, pos: Vector2) {
         self.target_position = pos;

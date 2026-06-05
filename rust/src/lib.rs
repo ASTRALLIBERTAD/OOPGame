@@ -1,3 +1,4 @@
+mod armor_system;
 pub mod entity;
 mod example;
 pub mod heart;
@@ -15,6 +16,7 @@ mod rustplayer;
 mod save_manager_rusts;
 mod terrain;
 mod world;
+
 use godot::prelude::*;
 
 pub struct RustExtension;

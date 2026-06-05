@@ -54,6 +54,7 @@ pub struct Priest {
 
     heal_timer: f64,
     sanctuary_timer: f64,
+    playing_oneshot: bool,
 }
 
 #[godot_api]
@@ -74,6 +75,7 @@ impl ICharacterBody2D for Priest {
             flee_timer: 0.0,
             heal_timer: 0.0,
             sanctuary_timer: 0.0,
+            playing_oneshot: false,
         }
     }
 
@@ -84,7 +86,9 @@ impl ICharacterBody2D for Priest {
         let pos = self.base_mut().get_global_position();
         self.wander_target = pos;
         self.home_position = pos;
-        self.wander_target = pos;
+
+        let callable = self.base().callable("on_animation_finished");
+        self.sprite.connect("animation_finished", &callable);
     }
 
     fn process(&mut self, delta: f64) {
@@ -187,8 +191,11 @@ impl Priest {
             if self.blessings_remaining > 0 {
                 self.blessings_remaining -= 1;
                 let heal = HEAL_AMOUNT * 2;
+
                 player_gd.bind_mut().heal(heal);
                 player_gd.bind_mut().apply_blessing(BLESSING_DURATION);
+                self.playing_oneshot = true;
+                self.sprite.play_ex().name("blessing").done();
                 let mut event_bus = get_autoload_by_name::<Node>("EventBus");
                 event_bus.call(
                     "emit_signal",
@@ -292,6 +299,8 @@ impl Priest {
                 let hp = player_gd.bind().get_health();
                 if my_pos.distance_to(player_pos) <= HEAL_RADIUS && hp <= HEAL_THRESHOLD {
                     self.heal_timer = 0.0;
+                    self.playing_oneshot = true;
+                    self.sprite.play_ex().name("heal").done();
                     player_gd.bind_mut().heal(HEAL_AMOUNT);
                     self.base_mut()
                         .emit_signal("heal_player", &[Variant::from(HEAL_AMOUNT)]);
@@ -320,13 +329,30 @@ impl Priest {
 
     fn move_toward(&mut self, target: Vector2, speed: f32) {
         let pos = self.base_mut().get_global_position();
+        if self.playing_oneshot {
+            self.base_mut().set_velocity(Vector2::ZERO);
+            self.base_mut().move_and_slide();
+            return;
+        }
         if pos.distance_to(target) < 6.0 {
             self.base_mut().set_velocity(Vector2::ZERO);
+            if self.sprite.get_animation().to_string() != "default" {
+                self.sprite.play_ex().name("default").done();
+            }
         } else {
             let dir = (target - pos).normalized();
             self.sprite.set_flip_h(dir.x < 0.0);
             self.base_mut().set_velocity(dir * speed);
+            if self.sprite.get_animation().to_string() != "walking_running" {
+                self.sprite.play_ex().name("walking_running").done();
+            }
         }
         self.base_mut().move_and_slide();
+    }
+
+    #[func]
+    fn on_animation_finished(&mut self) {
+        self.playing_oneshot = false;
+        self.sprite.play_ex().name("default").done();
     }
 }

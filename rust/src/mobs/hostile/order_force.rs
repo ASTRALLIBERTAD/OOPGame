@@ -45,6 +45,8 @@ pub struct OrderForce {
     boss_nearby: bool,
     arrest_timer: f64,
     arresting: bool,
+    playing_oneshot: bool,
+    flash_timer: f64,
 }
 
 #[godot_api]
@@ -65,6 +67,8 @@ impl ICharacterBody2D for OrderForce {
             boss_nearby: false,
             arrest_timer: 0.0,
             arresting: false,
+            playing_oneshot: false,
+            flash_timer: 0.0,
         }
     }
 
@@ -73,11 +77,21 @@ impl ICharacterBody2D for OrderForce {
         self.base_mut().add_to_group("order_force");
         self.attack_area.set_monitoring(true);
         self.attack_area.set_monitorable(false);
+        let callable = self.base().callable("on_animation_finished");
+        self.sprite.connect("animation_finished", &callable);
     }
 
     fn process(&mut self, delta: f64) {
         if !self.is_alive() {
             return;
+        }
+
+        if self.flash_timer > 0.0 {
+            self.flash_timer -= delta;
+            if self.flash_timer <= 0.0 {
+                self.flash_timer = 0.0;
+                self.base_mut().set_modulate(Color::WHITE);
+            }
         }
 
         self.tick_attack_cooldown(delta);
@@ -103,12 +117,15 @@ impl ICharacterBody2D for OrderForce {
             self.mob_state = MobState::Idle;
             self.base_mut().set_velocity(Vector2::ZERO);
             self.base_mut().move_and_slide();
+            if !self.playing_oneshot && self.sprite.get_animation().to_string() != "default" {
+                self.sprite.play_ex().name("default").done();
+            }
             return;
         }
 
         self.aggro(player_pos);
 
-        if self.arresting {
+        if self.playing_oneshot || self.arresting {
             self.base_mut().set_velocity(Vector2::ZERO);
             self.base_mut().move_and_slide();
             return;
@@ -129,6 +146,8 @@ impl ICharacterBody2D for OrderForce {
                     godot_print!("Puersa ng Orden: 'You are under arrest!'");
                 }
             }
+            self.playing_oneshot = true;
+            self.sprite.play_ex().name("attack").done();
             self.can_slash = false;
             self.slash_timer = 0.0;
         }
@@ -138,9 +157,12 @@ impl ICharacterBody2D for OrderForce {
 impl Entity for OrderForce {
     fn take_damage(&mut self, amount: i32) {
         self.health = (self.health - amount).max(0);
+        self.base_mut().set_modulate(Color::from_rgb(1.0, 0.3, 0.3));
+        self.flash_timer = 0.2;
         if !self.is_alive() {
             self.mob_state = MobState::Dead;
-            self.base_mut().queue_free();
+            self.playing_oneshot = true;
+            self.sprite.play_ex().name("death").done();
         }
     }
 
@@ -164,6 +186,9 @@ impl HostileBehavior for OrderForce {
         self.sprite.set_flip_h(dir.x < 0.0);
         self.base_mut().set_velocity(dir * speed);
         self.base_mut().move_and_slide();
+        if self.sprite.get_animation().to_string() != "walking_running" {
+            self.sprite.play_ex().name("walking_running").done();
+        }
     }
 
     fn attack(&mut self, target: &mut dyn Entity) {
@@ -228,5 +253,15 @@ impl OrderForce {
     #[func]
     pub fn get_health(&self) -> i32 {
         self.health
+    }
+
+    #[func]
+    fn on_animation_finished(&mut self) {
+        self.playing_oneshot = false;
+        if self.mob_state == MobState::Dead {
+            self.base_mut().queue_free();
+        } else {
+            self.sprite.play_ex().name("default").done();
+        }
     }
 }

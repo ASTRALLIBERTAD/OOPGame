@@ -1,5 +1,6 @@
 use godot::classes::{
-    AnimatedSprite2D, Area2D, Camera2D, CharacterBody2D, Control, ICharacterBody2D, Input, Label,
+    AnimatedSprite2D, Area2D, BoxContainer, Camera2D, CanvasLayer, CharacterBody2D, Control,
+    ICharacterBody2D, Input, Label,
 };
 use godot::obj::WithBaseField;
 use godot::prelude::*;
@@ -65,6 +66,12 @@ pub struct Rustplayer {
     #[export]
     item_right: OnEditor<Gd<InvSlot>>,
 
+    #[export]
+    hotbar: OnEditor<Gd<BoxContainer>>,
+
+    #[export]
+    touch_control: OnEditor<Gd<CanvasLayer>>,
+
     can_slash: bool,
     slash_timer: f64,
 
@@ -95,6 +102,9 @@ pub struct Rustplayer {
     blessed_timer: f64,
     speed_bonus: f32,
     speed_bonus_timer: f64,
+
+    playing_oneshot: bool,
+    flash_timer: f64,
 }
 
 #[godot_api]
@@ -116,6 +126,8 @@ impl ICharacterBody2D for Rustplayer {
             last_chunk_pos: Vector2i::new(i32::MAX, i32::MAX),
             last_update_time: 0.0,
             item_right: OnEditor::default(),
+            hotbar: OnEditor::default(),
+            touch_control: OnEditor::default(),
             can_slash: true,
             slash_timer: 0.0,
             attack_area: OnEditor::default(),
@@ -139,6 +151,9 @@ impl ICharacterBody2D for Rustplayer {
             blessed_timer: 0.0,
             speed_bonus: 0.0,
             speed_bonus_timer: 0.0,
+
+            playing_oneshot: false,
+            flash_timer: 0.0,
         }
     }
 
@@ -164,9 +179,20 @@ impl ICharacterBody2D for Rustplayer {
 
         self.attack_area.set_monitoring(true);
         self.attack_area.set_monitorable(false);
+
+        let callable = self.base().callable("on_animation_finished");
+        self.sprite.connect("animation_finished", &callable);
     }
 
     fn process(&mut self, delta: f64) {
+        if self.flash_timer > 0.0 {
+            self.flash_timer -= delta;
+            if self.flash_timer <= 0.0 {
+                self.flash_timer = 0.0;
+                self.base_mut().set_modulate(Color::WHITE);
+            }
+        }
+
         if self.base_mut().is_multiplayer_authority() {
             let slots = self.inv.bind().get_slots();
             let armor_speed_mod = self.armor_system.bind().total_speed_modifier(slots);
@@ -200,6 +226,20 @@ impl ICharacterBody2D for Rustplayer {
             } else {
                 self.base_mut().set_velocity(velocity);
                 self.base_mut().move_and_slide();
+            }
+
+            if !self.playing_oneshot {
+                let is_moving = self.base_mut().get_velocity().length() > 1.0;
+                let current_anim = self.sprite.get_animation().to_string();
+                if is_moving {
+                    if current_anim != "walking_running" {
+                        self.sprite.play_ex().name("walking_running").done();
+                    }
+                } else {
+                    if current_anim != "default" {
+                        self.sprite.play_ex().name("default").done();
+                    }
+                }
             }
 
             self.update_terrain_if_needed(delta);
@@ -274,10 +314,15 @@ impl Entity for Rustplayer {
         self.health = (self.health - actual_damage).max(0);
         self.heart_ui.bind_mut().set_heart_display(self.health);
 
+        self.base_mut().set_modulate(Color::from_rgb(1.0, 0.3, 0.3));
+        self.flash_timer = 0.2;
+
         self.inv.bind_mut().signals().update().emit();
 
         if !self.is_alive() {
             godot_print!("player dead");
+            // self.playing_oneshot = true;
+            // self.sprite.play_ex().name("death").done();
         }
     }
 
@@ -333,11 +378,22 @@ impl Rustplayer {
     fn open(&mut self) {
         self.is_open = true;
         self.item_slot.set_visible(true);
+
+        self.hotbar.set_visible(false);
+        self.touch_control.set_visible(false);
+        self.coords.set_visible(false);
+        self.heart_ui.set_visible(false);
     }
 
     fn close(&mut self) {
         self.is_open = false;
         self.item_slot.set_visible(false);
+
+        self.hotbar.set_visible(true);
+
+        self.touch_control.set_visible(true);
+        self.coords.set_visible(true);
+        self.heart_ui.set_visible(true);
     }
 
     #[func]
@@ -571,6 +627,12 @@ impl Rustplayer {
     #[func]
     pub fn get_heart_ui(&self) -> Gd<Heart> {
         self.heart_ui.clone()
+    }
+
+    #[func]
+    fn on_animation_finished(&mut self) {
+        self.playing_oneshot = false;
+        self.sprite.play_ex().name("default").done();
     }
 }
 

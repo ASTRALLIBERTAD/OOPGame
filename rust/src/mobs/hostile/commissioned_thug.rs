@@ -48,6 +48,8 @@ pub struct CommissionedThug {
     toll_timer: f64,
     can_slash: bool,
     slash_timer: f64,
+    playing_oneshot: bool,
+    flash_timer: f64,
 }
 
 #[godot_api]
@@ -70,16 +72,28 @@ impl ICharacterBody2D for CommissionedThug {
             toll_timer: 6.0,
             can_slash: true,
             slash_timer: 0.0,
+            playing_oneshot: false,
+            flash_timer: 0.0,
         }
     }
 
     fn ready(&mut self) {
         self.base_mut().add_to_group("enemy");
+        let callable = self.base().callable("on_animation_finished");
+        self.sprite.connect("animation_finished", &callable);
     }
 
     fn process(&mut self, delta: f64) {
         if !self.is_alive() {
             return;
+        }
+
+        if self.flash_timer > 0.0 {
+            self.flash_timer -= delta;
+            if self.flash_timer <= 0.0 {
+                self.flash_timer = 0.0;
+                self.base_mut().set_modulate(Color::WHITE);
+            }
         }
 
         if !self.can_slash {
@@ -109,17 +123,29 @@ impl ICharacterBody2D for CommissionedThug {
             self.mob_state = MobState::Idle;
             self.base_mut().set_velocity(Vector2::ZERO);
             self.base_mut().move_and_slide();
+            if !self.playing_oneshot && self.sprite.get_animation().to_string() != "default" {
+                self.sprite.play_ex().name("default").done();
+            }
             return;
         }
 
         if self.mob_state == MobState::Idle && self.toll_demanded {
             self.base_mut().set_velocity(Vector2::ZERO);
             self.base_mut().move_and_slide();
+            if !self.playing_oneshot && self.sprite.get_animation().to_string() != "default" {
+                self.sprite.play_ex().name("default").done();
+            }
             return;
         }
 
         if self.corruption_level < 5 && !self.toll_demanded && self.toll_amount > 0 {
             self.tick_toll_demand(delta);
+            return;
+        }
+
+        if self.playing_oneshot {
+            self.base_mut().set_velocity(Vector2::ZERO);
+            self.base_mut().move_and_slide();
             return;
         }
 
@@ -132,6 +158,8 @@ impl ICharacterBody2D for CommissionedThug {
                 player.bind_mut().take_damage(dmg);
                 godot_print!("Komisyon Goon hits player for {}!", dmg);
             }
+            self.playing_oneshot = true;
+            self.sprite.play_ex().name("attack").done();
             self.can_slash = false;
             self.slash_timer = 0.0;
         }
@@ -141,8 +169,12 @@ impl ICharacterBody2D for CommissionedThug {
 impl Entity for CommissionedThug {
     fn take_damage(&mut self, amount: i32) {
         self.health = (self.health - amount).max(0);
+        self.base_mut().set_modulate(Color::from_rgb(1.0, 0.3, 0.3));
+        self.flash_timer = 0.2;
         if !self.is_alive() {
             self.mob_state = MobState::Dead;
+            self.playing_oneshot = true;
+            self.sprite.play_ex().name("death").done();
 
             let mut rng = rand::rng();
             let multiplier: f32 = rng.random_range(0.3..=2.0);
@@ -162,8 +194,6 @@ impl Entity for CommissionedThug {
                     Variant::from(pos),
                 ],
             );
-
-            self.base_mut().queue_free();
         }
     }
 
@@ -187,6 +217,9 @@ impl HostileBehavior for CommissionedThug {
         self.sprite.set_flip_h(dir.x < 0.0);
         self.base_mut().set_velocity(dir * speed);
         self.base_mut().move_and_slide();
+        if self.sprite.get_animation().to_string() != "walking_running" {
+            self.sprite.play_ex().name("walking_running").done();
+        }
     }
 
     fn attack(&mut self, target: &mut dyn Entity) {
@@ -258,5 +291,15 @@ impl CommissionedThug {
     #[func]
     pub fn get_health(&self) -> i32 {
         self.health
+    }
+
+    #[func]
+    fn on_animation_finished(&mut self) {
+        self.playing_oneshot = false;
+        if self.mob_state == MobState::Dead {
+            self.base_mut().queue_free();
+        } else {
+            self.sprite.play_ex().name("default").done();
+        }
     }
 }

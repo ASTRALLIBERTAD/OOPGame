@@ -57,6 +57,8 @@ pub struct Farmer {
     quest_kill_target: i32,
     quest_kills: i32,
     quest_active: bool,
+    playing_oneshot: bool,
+    flash_timer: f64,
 }
 
 #[godot_api]
@@ -85,6 +87,8 @@ impl ICharacterBody2D for Farmer {
             quest_kill_target: 3,
             quest_kills: 0,
             quest_active: false,
+            playing_oneshot: false,
+            flash_timer: 0.0,
         }
     }
 
@@ -94,11 +98,21 @@ impl ICharacterBody2D for Farmer {
         let pos = self.base_mut().get_global_position();
         self.wander_target = pos;
         self.home_position = pos;
+        let callable = self.base().callable("on_animation_finished");
+        self.sprite.connect("animation_finished", &callable);
     }
 
     fn process(&mut self, delta: f64) {
         if !self.is_alive() {
             return;
+        }
+
+        if self.flash_timer > 0.0 {
+            self.flash_timer -= delta;
+            if self.flash_timer <= 0.0 {
+                self.flash_timer = 0.0;
+                self.base_mut().set_modulate(Color::WHITE);
+            }
         }
 
         self.harvest_timer += delta;
@@ -113,6 +127,12 @@ impl ICharacterBody2D for Farmer {
                     Variant::from(pos),
                 ],
             );
+        }
+
+        if self.playing_oneshot {
+            self.base_mut().set_velocity(Vector2::ZERO);
+            self.base_mut().move_and_slide();
+            return;
         }
 
         if self.mob_state == MobState::Fleeing {
@@ -150,14 +170,17 @@ impl ICharacterBody2D for Farmer {
 impl Entity for Farmer {
     fn take_damage(&mut self, amount: i32) {
         self.health = (self.health - amount).max(0);
+        self.base_mut().set_modulate(Color::from_rgb(1.0, 0.3, 0.3));
+        self.flash_timer = 0.2;
         if !self.is_alive() {
             self.mob_state = MobState::Dead;
+            self.playing_oneshot = true;
+            self.sprite.play_ex().name("death").done();
             let mut event_bus = get_autoload_by_name::<Node>("EventBus");
             event_bus.call(
                 "emit_signal",
                 &[Variant::from(GString::from("civilian_killed"))],
             );
-            self.base_mut().queue_free();
         }
     }
 
@@ -275,16 +298,24 @@ impl Farmer {
                 self.wander_timer = self.wander_interval;
             }
             self.base_mut().set_velocity(Vector2::ZERO);
+            if self.sprite.get_animation().to_string() != "default" {
+                self.sprite.play_ex().name("default").done();
+            }
         } else {
             let dir = (target - pos).normalized();
             self.sprite.set_flip_h(dir.x < 0.0);
             self.base_mut().set_velocity(dir * speed);
+            if self.sprite.get_animation().to_string() != "walking_running" {
+                self.sprite.play_ex().name("walking_running").done();
+            }
         }
         self.base_mut().move_and_slide();
     }
 
     #[func]
     pub fn on_interact(&mut self) {
+        self.playing_oneshot = true;
+        self.sprite.play_ex().name("on_interact").done();
         let mut event_bus = get_autoload_by_name::<Node>("EventBus");
         if self.has_quest {
             self.quest_active = true;
@@ -325,6 +356,8 @@ impl Farmer {
         self.quest_kills = 0;
         self.trust = (self.trust + 1).min(5);
         self.base_mut().emit_signal("quest_completed", &[]);
+        self.playing_oneshot = true;
+        self.sprite.play_ex().name("on_interact").done();
 
         let pos = self.base_mut().get_global_position();
         let mut event_bus = get_autoload_by_name::<Node>("EventBus");
@@ -381,5 +414,15 @@ impl Farmer {
     #[func]
     pub fn get_health(&self) -> i32 {
         self.health
+    }
+
+    #[func]
+    fn on_animation_finished(&mut self) {
+        self.playing_oneshot = false;
+        if self.mob_state == MobState::Dead {
+            self.base_mut().queue_free();
+        } else {
+            self.sprite.play_ex().name("default").done();
+        }
     }
 }

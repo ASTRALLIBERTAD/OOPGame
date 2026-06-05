@@ -103,6 +103,7 @@ pub struct Terrain1 {
     temperature: Gd<FastNoiseLite>,
     altitude: Gd<FastNoiseLite>,
     biome: Gd<FastNoiseLite>,
+    variant: Gd<FastNoiseLite>,
     player_chunks: HashMap<i32, HashSet<Vector2i>>,
     player_positions: HashMap<i32, Vector2i>,
     chunk_cache: HashMap<Vector2i, ChunkData>,
@@ -135,6 +136,7 @@ impl ITileMapLayer for Terrain1 {
             temperature: FastNoiseLite::new_gd(),
             altitude: FastNoiseLite::new_gd(),
             biome: FastNoiseLite::new_gd(),
+            variant: FastNoiseLite::new_gd(),
             player_chunks: HashMap::new(),
             player_positions: HashMap::new(),
             chunk_cache: HashMap::new(),
@@ -170,6 +172,10 @@ impl ITileMapLayer for Terrain1 {
         self.biome
             .set_seed(self.world_seed.wrapping_add(biome::BIOME_SEED_OFFSET));
         self.biome.set_frequency(biome::BIOME_FREQUENCY);
+        // Variant noise: deterministic, different offset, medium frequency -> patches.
+        self.variant
+            .set_seed(self.world_seed.wrapping_add(biome::VARIANT_SEED_OFFSET));
+        self.variant.set_frequency(biome::VARIANT_FREQUENCY);
         godot_print!("Terrain1 ready with seed: {}", self.world_seed);
     }
 
@@ -260,6 +266,8 @@ impl Terrain1 {
         self.altitude.set_seed(self.world_seed);
         self.biome
             .set_seed(self.world_seed.wrapping_add(biome::BIOME_SEED_OFFSET));
+        self.variant
+            .set_seed(self.world_seed.wrapping_add(biome::VARIANT_SEED_OFFSET));
         godot_print!("Terrain1 synced callable seed: {}", seed);
     }
 
@@ -429,11 +437,14 @@ impl Terrain1 {
                     // Below the altitude threshold: water (unchanged).
                     (1, V2i { x: 0, y: 11 })
                 } else {
-                    // Land: pick this cell's Luzon biome from the biome noise.
-                    let bnoise = self
-                        .biome
-                        .get_noise_2d((start_x + x) as f32, (start_y + y) as f32);
-                    let (tx, ty) = biome::select_biome(bnoise).land_tile();
+                    // Land: pick this cell's Luzon biome from the low-freq biome
+                    // noise, then its variant tile from the medium-freq variant
+                    // noise (same cell) so variants cluster into small patches.
+                    let fx = (start_x + x) as f32;
+                    let fy = (start_y + y) as f32;
+                    let selected = biome::select_biome(self.biome.get_noise_2d(fx, fy));
+                    let vnoise = self.variant.get_noise_2d(fx, fy);
+                    let (tx, ty) = selected.variant_tile(vnoise);
                     (biome::BIOME_SOURCE_ID, V2i { x: tx, y: ty })
                 };
 

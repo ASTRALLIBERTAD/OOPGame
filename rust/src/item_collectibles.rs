@@ -27,6 +27,8 @@ pub struct Collectibles {
     /// `None` for ordinary (non-armor) collectibles.
     #[export]
     armor_piece: Option<Gd<ArmorPiece>>,
+    #[export]
+    base_price: i32,
 }
 
 #[godot_api]
@@ -39,6 +41,7 @@ impl IResource for Collectibles {
             icon: None,
             stackable: bool::default(),
             armor_piece: None,
+            base_price: 0,
         }
     }
 }

@@ -85,6 +85,9 @@ pub struct Rustplayer {
     #[var(get = get_hunger, set = set_hunger)]
     hunger: i32,
 
+    #[export]
+    death_ui: OnEditor<Gd<Control>>,
+
     hunger_drain_timer: f64,
     regen_timer: f64,
     starvation_timer: f64,
@@ -136,6 +139,7 @@ impl ICharacterBody2D for Rustplayer {
             attack_area: OnEditor::default(),
             shop_ui: OnEditor::default(),
             hunger: 20,
+            death_ui: OnEditor::default(),
             hunger_drain_timer: 0.0,
             regen_timer: 0.0,
             starvation_timer: 0.0,
@@ -330,6 +334,9 @@ impl Entity for Rustplayer {
             godot_print!("player dead");
             self.playing_oneshot = true;
             self.sprite.play_ex().name("death").done();
+
+            self.death_ui.set_visible(true);
+            self.base_mut().get_tree().set_pause(true);
         }
     }
 

@@ -27,6 +27,7 @@ GlobalNodeManager="*res://autoloads/NodeManager.tscn"
 EventBus="*uid://uto40usis8fy"
 ItemSpawner="*uid://crv7ksxwlyblx"
 ConsequenceSystem="*uid://ddjekmj8l73kt"
+SpawnManager="*uid://jsgwaa620icw"
 
 [display]
 

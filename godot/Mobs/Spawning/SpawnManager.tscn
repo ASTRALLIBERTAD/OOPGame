@@ -1,0 +1,11 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://Mobs/Spawning/SpawnManager.gd" id="1_mgr"]
+[ext_resource type="Resource" path="res://Mobs/Spawning/spawn_config.tres" id="2_cfg"]
+
+[node name="SpawnManager" type="Node"]
+script = ExtResource("1_mgr")
+config = ExtResource("2_cfg")
+rules_path = "res://Mobs/Spawning/spawn_rules.json"
+auto_run = true
+validate_on_ready = true

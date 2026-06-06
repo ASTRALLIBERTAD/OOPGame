@@ -1,0 +1,112 @@
+{
+  "_meta": {
+    "doc": "Data-driven mob spawn table. Keyed region -> subzone -> mob -> row.",
+    "row_fields": {
+      "density": "very_low | low | med | high  (mapped to a weight in SpawnConfig.density_weights)",
+      "time": "day | evening | night | day_evening | evening_night | 24h",
+      "group_min": "minimum mobs per spawned group (inclusive)",
+      "group_max": "maximum mobs per spawned group (inclusive)",
+      "location": "flavor / spawn-point hint only; not used by spawn math"
+    },
+    "regions_routing": {
+      "NCR": ["urban_center", "periphery_slum"],
+      "CAR": ["highland_village", "deep_forest"],
+      "Ilocos": ["rice_paddies", "highway_coast"],
+      "Bicol": ["coastal_villages", "seaport"],
+      "CALABARZON": ["city_suburbs", "highway_port"]
+    },
+    "notes": "Region encounter multipliers and density weights live in spawn_config.tres, not here."
+  },
+
+  "regions": {
+    "NCR": {
+      "urban_center": {
+        "ofws":              { "density": "low",  "time": "day_evening", "group_min": 1, "group_max": 1, "location": "Airport, expat bars" },
+        "priest":            { "density": "med",  "time": "day",         "group_min": 1, "group_max": 1, "location": "Cathedrals, chapels" },
+        "journalist":        { "density": "med",  "time": "day",         "group_min": 1, "group_max": 2, "location": "CBD, press offices" },
+        "roaming_trader":    { "density": "med",  "time": "day",         "group_min": 1, "group_max": 3, "location": "City highways, malls" },
+        "corruption_broker": { "density": "low",  "time": "day",         "group_min": 1, "group_max": 2, "location": "Government plaza, luxury bars" },
+        "order_forces":      { "density": "med",  "time": "24h",         "group_min": 2, "group_max": 4, "location": "Police stations, checkpoints (EDSA)" }
+      },
+      "periphery_slum": {
+        "farmers":           { "density": "low",      "time": "day",           "group_min": 1, "group_max": 2, "location": "City outskirts gardens (rare)" },
+        "snatcher":          { "density": "high",     "time": "evening_night", "group_min": 2, "group_max": 5, "location": "Slums, night markets, alleys" },
+        "commissioned_thug": { "density": "high",     "time": "evening_night", "group_min": 3, "group_max": 6, "location": "Slums, business-district outskirts" },
+        "smuggler_vessel":   { "density": "low",      "time": "night",         "group_min": 2, "group_max": 4, "location": "Pasig River docks, Manila Bay" },
+        "troll":             { "density": "very_low", "time": "night",         "group_min": 1, "group_max": 2, "location": "Sewer tunnels, underground" }
+      }
+    },
+
+    "CAR": {
+      "highland_village": {
+        "farmers":           { "density": "med",      "time": "day", "group_min": 2, "group_max": 4, "location": "Terraced rice fields, villages" },
+        "ofws":              { "density": "very_low",  "time": "day", "group_min": 1, "group_max": 1, "location": "Baguio airport/port" },
+        "priest":            { "density": "med",      "time": "day", "group_min": 1, "group_max": 1, "location": "Village chapels, mountaintops" },
+        "journalist":        { "density": "low",      "time": "day", "group_min": 1, "group_max": 1, "location": "Baguio City center" },
+        "roaming_trader":    { "density": "med",      "time": "day", "group_min": 1, "group_max": 2, "location": "Mountain trails, jeepney terminals" },
+        "corruption_broker": { "density": "very_low", "time": "day", "group_min": 1, "group_max": 1, "location": "Baguio civic center (rare)" },
+        "order_forces":      { "density": "low",      "time": "24h", "group_min": 2, "group_max": 3, "location": "Mountain checkpoints, Baguio PD" }
+      },
+      "deep_forest": {
+        "snatcher":          { "density": "low",      "time": "evening", "group_min": 2, "group_max": 3, "location": "Remote roads (Halsema Pass)" },
+        "commissioned_thug": { "density": "low",      "time": "night",   "group_min": 2, "group_max": 4, "location": "Abandoned mines, logging camps" },
+        "smuggler_vessel":   { "density": "very_low", "time": "night",   "group_min": 1, "group_max": 2, "location": "Alto/Abra riverbanks" },
+        "troll":             { "density": "med",      "time": "night",   "group_min": 1, "group_max": 2, "location": "Dense forests, caves" }
+      }
+    },
+
+    "Ilocos": {
+      "rice_paddies": {
+        "farmers": { "density": "med",      "time": "day",   "group_min": 2, "group_max": 5, "location": "Rice farms (Pangasinan), tobacco farms" },
+        "priest":  { "density": "med",      "time": "day",   "group_min": 1, "group_max": 1, "location": "Catholic churches (Vigan, Laoag)" },
+        "troll":   { "density": "very_low", "time": "night", "group_min": 1, "group_max": 2, "location": "Ilocos mountains/forests" }
+      },
+      "highway_coast": {
+        "ofws":              { "density": "low",      "time": "day",   "group_min": 1, "group_max": 1, "location": "Laoag airport terminals" },
+        "journalist":        { "density": "low",      "time": "day",   "group_min": 1, "group_max": 2, "location": "Provincial capitals, radio stations" },
+        "roaming_trader":    { "density": "med",      "time": "day",   "group_min": 1, "group_max": 3, "location": "Highways (NLEX, SCTEX), bus stops" },
+        "snatcher":          { "density": "med",      "time": "night", "group_min": 2, "group_max": 4, "location": "Markets, bus terminals" },
+        "commissioned_thug": { "density": "low",      "time": "night", "group_min": 2, "group_max": 4, "location": "Mining areas, highway outskirts" },
+        "corruption_broker": { "density": "very_low", "time": "day",   "group_min": 1, "group_max": 1, "location": "Provincial government plaza (rare)" },
+        "order_forces":      { "density": "med",      "time": "24h",   "group_min": 2, "group_max": 4, "location": "Ilocos checkpoints (Candon)" },
+        "smuggler_vessel":   { "density": "low",      "time": "night", "group_min": 2, "group_max": 4, "location": "Coastal fishing ports (Lingayen Gulf)" }
+      }
+    },
+
+    "Bicol": {
+      "coastal_villages": {
+        "farmers":           { "density": "high",     "time": "day",   "group_min": 3, "group_max": 5, "location": "Rice flats (Magarao, Camarines)" },
+        "ofws":              { "density": "low",      "time": "day",   "group_min": 1, "group_max": 1, "location": "Legazpi/Naga airports" },
+        "priest":            { "density": "med",      "time": "day",   "group_min": 1, "group_max": 1, "location": "Village chapels, Naga Cathedral" },
+        "journalist":        { "density": "low",      "time": "day",   "group_min": 1, "group_max": 1, "location": "Naga/Legazpi press offices" },
+        "roaming_trader":    { "density": "med",      "time": "day",   "group_min": 1, "group_max": 2, "location": "Maharlika Highway stops" },
+        "snatcher":          { "density": "med",      "time": "night", "group_min": 2, "group_max": 3, "location": "Bus/train terminals" },
+        "commissioned_thug": { "density": "low",      "time": "night", "group_min": 3, "group_max": 6, "location": "Sawmill/mining outskirts" },
+        "corruption_broker": { "density": "very_low", "time": "day",   "group_min": 1, "group_max": 1, "location": "City hall plazas (rare)" },
+        "troll":             { "density": "very_low", "time": "night", "group_min": 1, "group_max": 2, "location": "Volcanic forests (Mt. Mayon)" }
+      },
+      "seaport": {
+        "order_forces":    { "density": "med", "time": "24h",   "group_min": 2, "group_max": 4, "location": "Highway checkpoints, coast guard" },
+        "smuggler_vessel": { "density": "med", "time": "night", "group_min": 2, "group_max": 5, "location": "Masbate docks, Sorsogon waters" }
+      }
+    },
+
+    "CALABARZON": {
+      "city_suburbs": {
+        "farmers":           { "density": "high",     "time": "day",   "group_min": 4, "group_max": 6, "location": "Laguna/Quezon rice & coconut farms" },
+        "priest":            { "density": "med",      "time": "day",   "group_min": 1, "group_max": 1, "location": "City churches (Antipolo, Bacoor)" },
+        "journalist":        { "density": "med",      "time": "day",   "group_min": 1, "group_max": 2, "location": "Cavite, Laguna news offices" },
+        "snatcher":          { "density": "high",     "time": "night", "group_min": 2, "group_max": 4, "location": "Shopping malls, jeepney terminals" },
+        "corruption_broker": { "density": "low",      "time": "day",   "group_min": 1, "group_max": 1, "location": "Provincial capitols (rare)" },
+        "troll":             { "density": "very_low", "time": "night", "group_min": 1, "group_max": 2, "location": "Mt. Banahaw, Sierra Madre trailheads" }
+      },
+      "highway_port": {
+        "ofws":              { "density": "med",  "time": "day_evening", "group_min": 1, "group_max": 2, "location": "Manila outskirts (airports, docks)" },
+        "roaming_trader":    { "density": "high", "time": "day",         "group_min": 1, "group_max": 3, "location": "SLEX, Rizal-Batangas highways" },
+        "commissioned_thug": { "density": "med",  "time": "night",       "group_min": 3, "group_max": 5, "location": "Slums, port vicinities" },
+        "order_forces":      { "density": "high", "time": "24h",         "group_min": 3, "group_max": 5, "location": "SLEX tolls, Cavite checkpoint" },
+        "smuggler_vessel":   { "density": "high", "time": "night",       "group_min": 3, "group_max": 6, "location": "Batangas Port, Laguna Lake" }
+      }
+    }
+  }
+}

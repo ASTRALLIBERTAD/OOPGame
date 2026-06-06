@@ -30,6 +30,14 @@
 /// Tile source id shared by every biome ground tile (world_tileset.png).
 pub const BIOME_SOURCE_ID: i32 = 1;
 
+// --- Stage 3.5 water tiles on BIOME_SOURCE_ID. ---
+/// Deep water: water cells NOT touching land (unchanged). Atlas (0,11) = bright cyan.
+pub const DEEP_WATER_TILE: (i32, i32) = (0, 11);
+/// Shallow/shore water: water cells adjacent to land. (0,11) deep water is already the
+/// lightest solid blue in the tileset, so the lighter "shallow" pick is the white foam
+/// tile (0,9). Swap to (0,10) for a foamy-dotted look, or (0,13) for a darker rim.
+pub const SHORE_WATER_TILE: (i32, i32) = (0, 9);
+
 // --- Biome ground-tile variants: atlas (x, y) on BIOME_SOURCE_ID, same color
 // family per biome. First entry doubles as the Stage 1 base tile. Edit to retune. ---
 const NCR_TILES: [(i32, i32); 2] = [(8, 0), (8, 1)]; // black rock

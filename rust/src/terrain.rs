@@ -426,6 +426,26 @@ impl Terrain1 {
         Self::get_chunk_coord_static(pos)
     }
 
+    // Stage 3.5: choose the tile for a WATER cell -- the shallow/shore tile if any of its
+    // 8 neighbours is land, else the deep tile. Neighbours are sampled in WORLD coords
+    // from the altitude noise, so shorelines stay seamless across chunk seams (a
+    // neighbour's altitude is available even if its chunk isn't generated yet).
+    #[inline]
+    fn water_tile(&self, wx: i32, wy: i32) -> V2i {
+        const NEIGHBORS: [(i32, i32); 8] = [
+            (1, 0), (-1, 0), (0, 1), (0, -1),
+            (1, 1), (1, -1), (-1, 1), (-1, -1),
+        ];
+        for (dx, dy) in NEIGHBORS {
+            if self.altitude.get_noise_2d((wx + dx) as f32, (wy + dy) as f32) >= 0.1 {
+                let (sx, sy) = biome::SHORE_WATER_TILE; // touches land -> shallow
+                return V2i { x: sx, y: sy };
+            }
+        }
+        let (dx, dy) = biome::DEEP_WATER_TILE; // surrounded by water -> deep
+        V2i { x: dx, y: dy }
+    }
+
     // Stage 3: place (or skip) the deterministic decoration for one world cell on the
     // decoration layer. Re-derived from the decoration noise + per-cell hash, so fresh
     // generation and chunk reload produce identical groves. Water cells get nothing.
@@ -508,8 +528,9 @@ impl Terrain1 {
             for x in 0..CHUNK_SIZE {
                 let noise = noise_map[ChunkData::index(x as usize, y as usize)];
                 let (source_id, coords) = if noise < 0.1 {
-                    // Below the altitude threshold: water (unchanged).
-                    (1, V2i { x: 0, y: 11 })
+                    // Below the altitude threshold: water. Shallow tile if it touches
+                    // land (Stage 3.5 shoreline), deep tile otherwise.
+                    (1, self.water_tile(start_x + x, start_y + y))
                 } else {
                     // Land: pick this cell's Luzon biome from the low-freq biome
                     // noise, then its variant tile from the medium-freq variant
@@ -665,8 +686,18 @@ impl Terrain1 {
         // Batch tile restoration
         for y in 0..CHUNK_SIZE {
             for x in 0..CHUNK_SIZE {
-                let coords = chunk.get(x as usize, y as usize);
                 let pos = Vector2i::new(start_x + x, start_y + y);
+                let saved = chunk.get(x as usize, y as usize);
+                // Stage 3.5: re-derive water tiles so shorelines show identically on
+                // reload (they are not authoritatively saved). Land tiles and any
+                // player-placed tiles are restored exactly as saved.
+                let is_water = (saved.x, saved.y) == biome::DEEP_WATER_TILE
+                    || (saved.x, saved.y) == biome::SHORE_WATER_TILE;
+                let coords = if is_water {
+                    self.water_tile(pos.x, pos.y)
+                } else {
+                    saved
+                };
                 if coords.x >= 0 {
                     self.base_mut()
                         .set_cell_ex(pos)
@@ -675,7 +706,7 @@ impl Terrain1 {
                         .done();
                 }
                 // Stage 3: re-derive decorations from noise (they are not saved) so
-                // reloaded chunks show identical groves to freshly generated ones.
+                // reloaded chunks show identical clusters to freshly generated ones.
                 self.place_decoration(&mut deco_layer, pos);
             }
         }

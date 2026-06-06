@@ -569,9 +569,37 @@ impl Rustplayer {
             {
                 broker.bind_mut().take_damage(damage);
             } else if let Ok(mut vessel) =
-                body.try_cast::<crate::mobs::hostile::smuggler_vessel::SmuglerVessel>()
+                body.clone()
+                    .try_cast::<crate::mobs::hostile::smuggler_vessel::SmuglerVessel>()
             {
                 vessel.bind_mut().take_damage(damage);
+            } else if let Ok(mut trader) =
+                body.clone()
+                    .try_cast::<crate::mobs::neutral::roaming_trader::RoamingTrader>()
+            {
+                trader.bind_mut().take_damage(damage);
+            } else if let Ok(mut student) = body
+                .clone()
+                .try_cast::<crate::mobs::neutral::student::Student>()
+            {
+                student.bind_mut().take_damage(damage);
+            } else if let Ok(mut journalist) =
+                body.clone()
+                    .try_cast::<crate::mobs::neutral::journalist::Journalist>()
+            {
+                journalist.bind_mut().take_damage(damage);
+            } else if let Ok(mut farmer) = body
+                .clone()
+                .try_cast::<crate::mobs::passive::farmer::Farmer>()
+            {
+                farmer.bind_mut().take_damage(damage);
+            } else if let Ok(mut priest) = body
+                .clone()
+                .try_cast::<crate::mobs::passive::priest::Priest>()
+            {
+                priest.bind_mut().take_damage(damage);
+            } else if let Ok(mut ofw) = body.try_cast::<crate::mobs::passive::ofw::Ofw>() {
+                ofw.bind_mut().take_damage(damage);
             }
         }
     }

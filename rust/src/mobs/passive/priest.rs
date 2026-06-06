@@ -130,7 +130,20 @@ impl Entity for Priest {
         self.health = (self.health - amount).max(0);
         if !self.is_alive() {
             self.mob_state = MobState::Dead;
-            self.base_mut().emit_signal("priest_killed", &[]);
+            let mut event_bus = get_autoload_by_name::<Node>("EventBus");
+            event_bus.call(
+                "emit_signal",
+                &[Variant::from(GString::from("civilian_killed"))],
+            );
+            event_bus.call(
+                "emit_signal",
+                &[
+                    Variant::from(GString::from("message")),
+                    Variant::from(GString::from(
+                        "You killed the Priest. The sanctuary is gone.",
+                    )),
+                ],
+            );
             self.base_mut().queue_free();
         }
     }

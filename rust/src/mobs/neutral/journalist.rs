@@ -61,6 +61,15 @@ pub struct Journalist {
     #[var(get = get_corruption_level, set = set_corruption_level)]
     corruption_level: i32,
 
+    #[export]
+    enforcer_scene: OnEditor<Gd<PackedScene>>,
+
+    #[export]
+    max_reinforcements: i32,
+
+    reinforcements_called: bool,
+    reinforcements_count: i32,
+
     mob_state: MobState,
     is_hostile: bool,
     home_position: Vector2,
@@ -95,6 +104,10 @@ impl ICharacterBody2D for Journalist {
             trust: 0,
             intel_count: 0,
             corruption_level: 0,
+            enforcer_scene: OnEditor::default(),
+            max_reinforcements: 2,
+            reinforcements_called: false,
+            reinforcements_count: 0,
             mob_state: MobState::Idle,
             is_hostile: false,
             home_position: Vector2::ZERO,
@@ -166,6 +179,11 @@ impl Entity for Journalist {
             return;
         }
         self.health = (self.health - amount).max(0);
+
+        if !self.reinforcements_called {
+            self.reinforcements_called = true;
+            self.call_reinforcements();
+        }
 
         if !self.is_hostile && self.corruption_level >= self.hostile_corruption_threshold {
             self.become_hostile();
@@ -243,6 +261,45 @@ impl HostileBehavior for Journalist {
 impl Journalist {
     #[signal]
     fn expose_boss();
+
+    fn call_reinforcements(&mut self) {
+        let my_pos = self.base_mut().get_global_position();
+        let mut parent = self.base_mut().get_parent().unwrap();
+        let count = self.max_reinforcements;
+        let mut event_bus = get_autoload_by_name::<Node>("EventBus");
+
+        event_bus.call(
+            "emit_signal",
+            &[
+                Variant::from(GString::from("message")),
+                Variant::from(GString::from(
+                    "Mamamahayag: 'Help! They're trying to silence the press!'",
+                )),
+            ],
+        );
+
+        let offsets = [
+            Vector2::new(-80.0, 0.0),
+            Vector2::new(80.0, 0.0),
+            Vector2::new(0.0, -80.0),
+            Vector2::new(0.0, 80.0),
+        ];
+
+        for i in 0..count as usize {
+            if i >= offsets.len() {
+                break;
+            }
+            let mut instance = self.enforcer_scene.instantiate().unwrap().cast::<Node2D>();
+            instance.set_global_position(my_pos + offsets[i]);
+            parent.add_child(&instance);
+            self.reinforcements_count += 1;
+        }
+
+        godot_print!(
+            "Journalist called {} reinforcements!",
+            self.reinforcements_count
+        );
+    }
 
     #[func]
     pub fn on_interact(&mut self) {

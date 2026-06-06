@@ -234,6 +234,28 @@ impl HostileBehavior for CommissionedThug {
 
 #[godot_api]
 impl CommissionedThug {
+    // fn nearest_target(&mut self) -> Option<(Gd<CharacterBody2D>, f32)> {
+    //     let my_pos = self.base_mut().get_global_position();
+    //     let mut nearest: Option<(Gd<CharacterBody2D>, f32)> = None;
+    //
+    //     for group in ["player", "civilian", "neutral"] {
+    //         for node in self
+    //             .base_mut()
+    //             .get_tree()
+    //             .get_nodes_in_group(group)
+    //             .iter_shared()
+    //         {
+    //             if let Ok(body) = node.try_cast::<CharacterBody2D>() {
+    //                 let dist = my_pos.distance_to(body.get_global_position());
+    //                 if nearest.as_ref().map_or(true, |(_, d)| dist < *d) {
+    //                     nearest = Some((body, dist));
+    //                 }
+    //             }
+    //         }
+    //     }
+    //     nearest
+    // }
+
     fn tick_toll_demand(&mut self, delta: f64) {
         self.toll_timer += delta;
         if self.toll_timer >= self.toll_cooldown {

@@ -1,3 +1,3 @@
-mod journalist;
-mod roaming_trader;
-mod student;
+pub mod journalist;
+pub mod roaming_trader;
+pub mod student;

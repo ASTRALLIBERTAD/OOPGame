@@ -14,6 +14,8 @@ signal food_ready(position: Vector2)
 signal enemy_killed_near_farmer(farmer)
 signal civilian_killed()
 
+signal priest_killed()
+
 signal balikbayan_box_dropped(position: Vector2)
 
 signal trade_requested(markup: float, trader: Node)
@@ -27,6 +29,7 @@ func _ready():
 		bribe_resolved.emit(false)
 		piso_changed.emit(0)
 		civilian_killed.emit()
+		priest_killed.emit()
 		article_published.emit(0)
 		boss_defeated.emit()
 		item_dropped.emit("", Vector2.ZERO)

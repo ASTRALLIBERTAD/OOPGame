@@ -1,11 +1,13 @@
 use godot::classes::{
-    AnimatedSprite2D, Area2D, Camera2D, CharacterBody2D, Control, ICharacterBody2D, Input, Label,
+    AnimatedSprite2D, Area2D, BoxContainer, Camera2D, CanvasLayer, CharacterBody2D, Control,
+    ICharacterBody2D, Input, Label,
 };
 use godot::obj::WithBaseField;
 use godot::prelude::*;
 use godot::tools::get_autoload_by_name;
 use std::str::FromStr;
 
+use crate::armor_system::ArmorSystem;
 use crate::entity::Entity;
 use crate::heart::Heart;
 use crate::inv_slot::InvSlot;
@@ -35,6 +37,9 @@ pub struct Rustplayer {
     inv: OnEditor<Gd<Inventory>>,
 
     #[export]
+    armor_system: OnEditor<Gd<ArmorSystem>>,
+
+    #[export]
     item_slot: OnEditor<Gd<Control>>,
 
     is_open: bool,
@@ -61,11 +66,20 @@ pub struct Rustplayer {
     #[export]
     item_right: OnEditor<Gd<InvSlot>>,
 
+    #[export]
+    hotbar: OnEditor<Gd<BoxContainer>>,
+
+    #[export]
+    touch_control: OnEditor<Gd<CanvasLayer>>,
+
     can_slash: bool,
     slash_timer: f64,
 
     #[export]
     attack_area: OnEditor<Gd<Area2D>>,
+
+    #[export]
+    shop_ui: OnEditor<Gd<Control>>,
 
     #[export]
     #[var(get = get_hunger, set = set_hunger)]
@@ -91,6 +105,9 @@ pub struct Rustplayer {
     blessed_timer: f64,
     speed_bonus: f32,
     speed_bonus_timer: f64,
+
+    playing_oneshot: bool,
+    flash_timer: f64,
 }
 
 #[godot_api]
@@ -101,6 +118,7 @@ impl ICharacterBody2D for Rustplayer {
             sprite: OnEditor::default(),
             coords: OnEditor::default(),
             inv: OnEditor::default(),
+            armor_system: OnEditor::default(),
             item_slot: OnEditor::default(),
             is_open: false,
             heart_ui: OnEditor::default(),
@@ -111,9 +129,12 @@ impl ICharacterBody2D for Rustplayer {
             last_chunk_pos: Vector2i::new(i32::MAX, i32::MAX),
             last_update_time: 0.0,
             item_right: OnEditor::default(),
+            hotbar: OnEditor::default(),
+            touch_control: OnEditor::default(),
             can_slash: true,
             slash_timer: 0.0,
             attack_area: OnEditor::default(),
+            shop_ui: OnEditor::default(),
             hunger: 20,
             hunger_drain_timer: 0.0,
             regen_timer: 0.0,
@@ -134,6 +155,9 @@ impl ICharacterBody2D for Rustplayer {
             blessed_timer: 0.0,
             speed_bonus: 0.0,
             speed_bonus_timer: 0.0,
+
+            playing_oneshot: false,
+            flash_timer: 0.0,
         }
     }
 
@@ -159,11 +183,24 @@ impl ICharacterBody2D for Rustplayer {
 
         self.attack_area.set_monitoring(true);
         self.attack_area.set_monitorable(false);
+
+        let callable = self.base().callable("on_animation_finished");
+        self.sprite.connect("animation_finished", &callable);
     }
 
     fn process(&mut self, delta: f64) {
+        if self.flash_timer > 0.0 {
+            self.flash_timer -= delta;
+            if self.flash_timer <= 0.0 {
+                self.flash_timer = 0.0;
+                self.base_mut().set_modulate(Color::WHITE);
+            }
+        }
+
         if self.base_mut().is_multiplayer_authority() {
-            let speed: f32 = 100.0 + self.speed_bonus;
+            let slots = self.inv.bind().get_slots();
+            let armor_speed_mod = self.armor_system.bind().total_speed_modifier(slots);
+            let speed: f32 = (100.0 + self.speed_bonus) * (1.0 + armor_speed_mod);
             let input = Input::singleton();
 
             let direction = Input::get_vector(
@@ -195,6 +232,20 @@ impl ICharacterBody2D for Rustplayer {
                 self.base_mut().move_and_slide();
             }
 
+            if !self.playing_oneshot {
+                let is_moving = self.base_mut().get_velocity().length() > 1.0;
+                let current_anim = self.sprite.get_animation().to_string();
+                if is_moving {
+                    if current_anim != "walking_running" {
+                        self.sprite.play_ex().name("walking_running").done();
+                    }
+                } else {
+                    if current_anim != "default" {
+                        self.sprite.play_ex().name("default").done();
+                    }
+                }
+            }
+
             self.update_terrain_if_needed(delta);
 
             let cord = self.get_player_cord_for_display();
@@ -215,7 +266,10 @@ impl ICharacterBody2D for Rustplayer {
             self.base_mut()
                 .rpc("update_position", &[Variant::from(pos)]);
 
-            if input.is_action_just_pressed("attack") && self.can_slash {
+            if input.is_action_just_pressed("attack")
+                && self.can_slash
+                && !self.shop_ui.is_visible()
+            {
                 self.can_slash = false;
                 self.slash_timer = 0.0;
                 self.attack();
@@ -258,10 +312,24 @@ impl Entity for Rustplayer {
             godot_print!("Sanctuary protects the player!");
             return;
         }
-        self.health = (self.health - amount).max(0);
+        let slots = self.inv.bind().get_slots();
+        let reduction = self.armor_system.bind().total_defense(slots.clone());
+        let actual_damage = (amount - reduction).max(0);
+
+        self.armor_system.bind().damage_durability(slots, 1);
+
+        self.health = (self.health - actual_damage).max(0);
         self.heart_ui.bind_mut().set_heart_display(self.health);
+
+        self.base_mut().set_modulate(Color::from_rgb(1.0, 0.3, 0.3));
+        self.flash_timer = 0.2;
+
+        self.inv.bind_mut().signals().update().emit();
+
         if !self.is_alive() {
             godot_print!("player dead");
+            // self.playing_oneshot = true;
+            // self.sprite.play_ex().name("death").done();
         }
     }
 
@@ -281,6 +349,7 @@ impl Rustplayer {
     #[signal]
     fn piso_changed(new_total: i32);
 
+    #[func]
     #[rpc(unreliable, any_peer)]
     fn update_position(&mut self, pos: Vector2) {
         self.target_position = pos;
@@ -316,11 +385,22 @@ impl Rustplayer {
     fn open(&mut self) {
         self.is_open = true;
         self.item_slot.set_visible(true);
+
+        self.hotbar.set_visible(false);
+        self.touch_control.set_visible(false);
+        self.coords.set_visible(false);
+        self.heart_ui.set_visible(false);
     }
 
     fn close(&mut self) {
         self.is_open = false;
         self.item_slot.set_visible(false);
+
+        self.hotbar.set_visible(true);
+
+        self.touch_control.set_visible(true);
+        self.coords.set_visible(true);
+        self.heart_ui.set_visible(true);
     }
 
     #[func]
@@ -496,9 +576,37 @@ impl Rustplayer {
             {
                 broker.bind_mut().take_damage(damage);
             } else if let Ok(mut vessel) =
-                body.try_cast::<crate::mobs::hostile::smuggler_vessel::SmuglerVessel>()
+                body.clone()
+                    .try_cast::<crate::mobs::hostile::smuggler_vessel::SmuglerVessel>()
             {
                 vessel.bind_mut().take_damage(damage);
+            } else if let Ok(mut trader) =
+                body.clone()
+                    .try_cast::<crate::mobs::neutral::roaming_trader::RoamingTrader>()
+            {
+                trader.bind_mut().take_damage(damage);
+            } else if let Ok(mut student) = body
+                .clone()
+                .try_cast::<crate::mobs::neutral::student::Student>()
+            {
+                student.bind_mut().take_damage(damage);
+            } else if let Ok(mut journalist) =
+                body.clone()
+                    .try_cast::<crate::mobs::neutral::journalist::Journalist>()
+            {
+                journalist.bind_mut().take_damage(damage);
+            } else if let Ok(mut farmer) = body
+                .clone()
+                .try_cast::<crate::mobs::passive::farmer::Farmer>()
+            {
+                farmer.bind_mut().take_damage(damage);
+            } else if let Ok(mut priest) = body
+                .clone()
+                .try_cast::<crate::mobs::passive::priest::Priest>()
+            {
+                priest.bind_mut().take_damage(damage);
+            } else if let Ok(mut ofw) = body.try_cast::<crate::mobs::passive::ofw::Ofw>() {
+                ofw.bind_mut().take_damage(damage);
             }
         }
     }
@@ -554,6 +662,12 @@ impl Rustplayer {
     #[func]
     pub fn get_heart_ui(&self) -> Gd<Heart> {
         self.heart_ui.clone()
+    }
+
+    #[func]
+    fn on_animation_finished(&mut self) {
+        self.playing_oneshot = false;
+        self.sprite.play_ex().name("default").done();
     }
 }
 

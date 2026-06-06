@@ -83,20 +83,10 @@ impl ICharacterBody2D for Snatcher {
             return;
         }
 
-        let my_pos = self.base_mut().get_global_position();
-        let Some(player_node) = self
-            .base_mut()
-            .get_tree()
-            .get_nodes_in_group("player")
-            .get(0)
-        else {
+        let Some((target_gd, distance)) = self.nearest_target() else {
             return;
         };
-        let Ok(player_gd) = player_node.try_cast::<CharacterBody2D>() else {
-            return;
-        };
-        let player_pos = player_gd.get_global_position();
-        let distance = my_pos.distance_to(player_pos);
+        let target_pos = target_gd.get_global_position();
 
         if distance > self.aggro_range {
             self.mob_state = MobState::Idle;
@@ -106,11 +96,11 @@ impl ICharacterBody2D for Snatcher {
             return;
         }
 
-        self.aggro(player_pos);
-        self.chase(player_pos, self.speed);
+        self.aggro(target_pos);
+        self.chase(target_pos, self.speed);
 
         if distance <= self.steal_range {
-            if let Ok(mut player) = player_gd.try_cast::<Rustplayer>() {
+            if let Ok(mut player) = target_gd.try_cast::<Rustplayer>() {
                 self.try_steal(&mut player.bind_mut());
             }
         }
@@ -181,6 +171,27 @@ impl Snatcher {
 
     #[signal]
     fn drop_stolen_piso(amount: i32, position: Vector2);
+
+    fn nearest_target(&mut self) -> Option<(Gd<CharacterBody2D>, f32)> {
+        let my_pos = self.base_mut().get_global_position();
+        let mut nearest: Option<(Gd<CharacterBody2D>, f32)> = None;
+        for group in ["player", "civilian", "neutral"] {
+            for node in self
+                .base_mut()
+                .get_tree()
+                .get_nodes_in_group(group)
+                .iter_shared()
+            {
+                if let Ok(body) = node.try_cast::<CharacterBody2D>() {
+                    let dist = my_pos.distance_to(body.get_global_position());
+                    if nearest.as_ref().map_or(true, |(_, d)| dist < *d) {
+                        nearest = Some((body, dist));
+                    }
+                }
+            }
+        }
+        nearest
+    }
 
     #[func]
     fn _on_animation_finished(&mut self) {

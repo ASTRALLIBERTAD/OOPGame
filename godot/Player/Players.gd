@@ -8,13 +8,13 @@ func _on_timer_timeout() -> void:
 func _on_inventory_pressed() -> void:
 	open_close()
 
-func full_or_not() -> bool:
-	var is_full = true
-	for i in inv.slots:
-		if i.item.name == "":
-			is_full = false
-			return is_full
-	return is_full
+func full_or_not(item: Collectibles = null) -> bool:
+	for i in range(12):
+		if inv.slots[i].item.name == "":
+			return false
+		if item and item.stackable and inv.slots[i].item.name == item.name:
+			return false
+	return true
 
 func player():
 	pass

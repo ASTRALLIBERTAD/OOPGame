@@ -1,5 +1,8 @@
 mod armor_system;
+<<<<<<< HEAD
 mod biome;
+=======
+>>>>>>> origin/main
 pub mod entity;
 mod example;
 pub mod heart;
@@ -17,6 +20,7 @@ mod rustplayer;
 mod save_manager_rusts;
 mod terrain;
 mod world;
+
 use godot::prelude::*;
 
 pub struct RustExtension;

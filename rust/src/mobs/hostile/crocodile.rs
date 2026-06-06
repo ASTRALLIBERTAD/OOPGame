@@ -65,6 +65,9 @@ pub struct Crocodile {
 
     regen_timer: f64,
 
+    playing_oneshot: bool,
+    flash_timer: f64,
+
     #[export]
     troll_scene: OnEditor<Gd<PackedScene>>,
 
@@ -80,8 +83,8 @@ impl ICharacterBody2D for Crocodile {
             sprite: OnEditor::default(),
             attack_area: OnEditor::default(),
             health: MAX_HP,
-            speed: 55.0,
-            aggro_range: 320.0,
+            speed: 65.0,
+            aggro_range: 500.0,
             attack_damage: 15,
             attack_cooldown: 1.4,
             corruption_tiles: 0,
@@ -91,9 +94,11 @@ impl ICharacterBody2D for Crocodile {
             slash_timer: 0.0,
             bribe_resolved: false,
             bribe_cooldown: 10.0,
-            bribe_timer: 0.0,
+            bribe_timer: 7.0,
             reinforcements_spawned: false,
             regen_timer: 0.0,
+            playing_oneshot: false,
+            flash_timer: 0.0,
             troll_scene: OnEditor::default(),
             enforcer_scene: OnEditor::default(),
         }
@@ -102,6 +107,8 @@ impl ICharacterBody2D for Crocodile {
     fn ready(&mut self) {
         self.base_mut().add_to_group("enemy");
         self.base_mut().add_to_group("boss");
+        let callable = self.base().callable("on_animation_finished");
+        self.sprite.connect("animation_finished", &callable);
     }
 
     fn process(&mut self, delta: f64) {
@@ -109,33 +116,47 @@ impl ICharacterBody2D for Crocodile {
             return;
         }
 
+        if self.flash_timer > 0.0 {
+            self.flash_timer -= delta;
+            if self.flash_timer <= 0.0 {
+                self.flash_timer = 0.0;
+                self.base_mut().set_modulate(Color::WHITE);
+            }
+        }
+
         self.tick_phase_transitions();
         self.tick_attack_cooldown(delta);
         self.tick_phase3_regen(delta);
 
-        let my_pos = self.base_mut().get_global_position();
-        let Some(player_node) = self
-            .base_mut()
-            .get_tree()
-            .get_nodes_in_group("player")
-            .get(0)
-        else {
-            return;
-        };
-        let Ok(player_gd) = player_node.try_cast::<CharacterBody2D>() else {
-            return;
-        };
-        let player_pos = player_gd.get_global_position();
-        let distance = my_pos.distance_to(player_pos);
-
-        if distance > self.aggro_range {
-            self.mob_state = MobState::Idle;
+        if self.playing_oneshot {
             self.base_mut().set_velocity(Vector2::ZERO);
             self.base_mut().move_and_slide();
             return;
         }
 
-        self.aggro(player_pos);
+        let my_pos = self.base_mut().get_global_position();
+        let Some((target_gd, distance)) = self.nearest_target() else {
+            return;
+        };
+        let target_pos = target_gd.get_global_position();
+
+        let max_range = if self.mob_state == MobState::Aggro {
+            self.aggro_range + 150.0
+        } else {
+            self.aggro_range
+        };
+
+        if distance > max_range {
+            self.mob_state = MobState::Idle;
+            self.base_mut().set_velocity(Vector2::ZERO);
+            self.base_mut().move_and_slide();
+            if self.sprite.get_animation().to_string() != "default" {
+                self.sprite.play_ex().name("default").done();
+            }
+            return;
+        }
+
+        self.aggro(target_pos);
 
         if self.phase == BuwayaPhase::Phase1 && !self.bribe_resolved {
             self.tick_bribe(delta);
@@ -145,27 +166,40 @@ impl ICharacterBody2D for Crocodile {
             self.call_reinforcements();
         }
 
-        self.chase(player_pos, self.speed);
+        self.chase(target_pos, self.speed);
 
         if distance <= 55.0 && self.can_slash {
-            if let Ok(mut player) = player_gd.try_cast::<Rustplayer>() {
-                let dmg = self.attack_damage;
+            let dmg = self.attack_damage;
+            if let Ok(mut player) = target_gd.clone().try_cast::<Rustplayer>() {
                 player.bind_mut().take_damage(dmg);
                 godot_print!("Buwaya strikes for {} damage!", dmg);
+            } else {
+                self.deal_damage_to_civilian(target_gd, dmg);
             }
             self.can_slash = false;
             self.slash_timer = 0.0;
+            self.playing_oneshot = true;
+            let attack_anim = if self.phase == BuwayaPhase::Phase3 {
+                "attack_phase3"
+            } else {
+                "normal_attack"
+            };
+            self.sprite.play_ex().name(attack_anim).done();
         }
+        let _ = my_pos;
     }
 }
 
 impl Entity for Crocodile {
     fn take_damage(&mut self, amount: i32) {
         self.health = (self.health - amount).max(0);
+        self.base_mut().set_modulate(Color::from_rgb(1.0, 0.3, 0.3));
+        self.flash_timer = 0.2;
         if !self.is_alive() {
             self.mob_state = MobState::Dead;
+            self.playing_oneshot = true;
+            self.sprite.play_ex().name("death").done();
             self.on_death();
-            self.base_mut().queue_free();
         }
     }
 
@@ -194,6 +228,9 @@ impl HostileBehavior for Crocodile {
         self.sprite.set_flip_h(dir.x < 0.0);
         self.base_mut().set_velocity(dir * speed);
         self.base_mut().move_and_slide();
+        if self.sprite.get_animation().to_string() != "walking_running" {
+            self.sprite.play_ex().name("walking_running").done();
+        }
     }
 
     fn attack(&mut self, target: &mut dyn Entity) {
@@ -217,6 +254,57 @@ impl Crocodile {
     #[signal]
     fn drop_item(item_id: GString, position: Vector2);
 
+    fn nearest_target(&mut self) -> Option<(Gd<CharacterBody2D>, f32)> {
+        let my_pos = self.base_mut().get_global_position();
+        let mut nearest: Option<(Gd<CharacterBody2D>, f32)> = None;
+        for group in ["player", "civilian", "neutral"] {
+            for node in self
+                .base_mut()
+                .get_tree()
+                .get_nodes_in_group(group)
+                .iter_shared()
+            {
+                if let Ok(body) = node.try_cast::<CharacterBody2D>() {
+                    let dist = my_pos.distance_to(body.get_global_position());
+                    if nearest.as_ref().map_or(true, |(_, d)| dist < *d) {
+                        nearest = Some((body, dist));
+                    }
+                }
+            }
+        }
+        nearest
+    }
+
+    fn deal_damage_to_civilian(&mut self, body: Gd<CharacterBody2D>, damage: i32) {
+        if let Ok(mut farmer) = body
+            .clone()
+            .try_cast::<crate::mobs::passive::farmer::Farmer>()
+        {
+            farmer.bind_mut().take_damage(damage);
+        } else if let Ok(mut priest) = body
+            .clone()
+            .try_cast::<crate::mobs::passive::priest::Priest>()
+        {
+            priest.bind_mut().take_damage(damage);
+        } else if let Ok(mut ofw) = body.clone().try_cast::<crate::mobs::passive::ofw::Ofw>() {
+            ofw.bind_mut().take_damage(damage);
+        } else if let Ok(mut trader) =
+            body.clone()
+                .try_cast::<crate::mobs::neutral::roaming_trader::RoamingTrader>()
+        {
+            trader.bind_mut().take_damage(damage);
+        } else if let Ok(mut student) = body
+            .clone()
+            .try_cast::<crate::mobs::neutral::student::Student>()
+        {
+            student.bind_mut().take_damage(damage);
+        } else if let Ok(mut journalist) =
+            body.try_cast::<crate::mobs::neutral::journalist::Journalist>()
+        {
+            journalist.bind_mut().take_damage(damage);
+        }
+    }
+
     fn tick_phase_transitions(&mut self) {
         let new_phase = if self.health > PHASE2_THRESHOLD {
             BuwayaPhase::Phase1
@@ -231,12 +319,16 @@ impl Crocodile {
             match self.phase {
                 BuwayaPhase::Phase2 => {
                     godot_print!("Buwaya: calling his enforcers...");
+                    self.playing_oneshot = true;
+                    self.sprite.play_ex().name("phase2").done();
                 }
                 BuwayaPhase::Phase3 => {
                     godot_print!("Buwaya reveals his true form!");
                     self.speed *= 1.3;
                     self.attack_damage += 5;
                     self.spawn_corruption_tiles();
+                    self.playing_oneshot = true;
+                    self.sprite.play_ex().name("phase3").done();
                 }
                 _ => {}
             }
@@ -297,6 +389,15 @@ impl Crocodile {
                     Variant::from(self_node),
                 ],
             );
+            event_bus.call(
+                "emit_signal",
+                &[
+                    Variant::from(GString::from("message")),
+                    Variant::from(GString::from("Buwaya: 'Let us not fight. I have an offer for you. 500 piso and we forget this ever happened.'")),
+                ],
+            );
+            self.base_mut()
+                .emit_signal("bribe_offered", &[Variant::from(500_i32)]);
             godot_print!("Buwaya: 'Let us not fight. I have an offer for you.'");
         }
     }
@@ -439,5 +540,15 @@ impl Crocodile {
     #[func]
     pub fn get_health(&self) -> i32 {
         self.health
+    }
+
+    #[func]
+    fn on_animation_finished(&mut self) {
+        self.playing_oneshot = false;
+        if self.mob_state == MobState::Dead {
+            self.base_mut().queue_free();
+        } else {
+            self.sprite.play_ex().name("default").done();
+        }
     }
 }

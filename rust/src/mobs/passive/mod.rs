@@ -1,3 +1,3 @@
-mod farmer;
-mod ofw;
-mod priest;
+pub mod farmer;
+pub mod ofw;
+pub mod priest;

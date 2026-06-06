@@ -13,8 +13,10 @@ use crate::inventory::Inventory;
 use crate::item_collectibles::Collectibles;
 use crate::node_manager::NodeManager;
 use crate::save_manager_rusts::SaveManagerRust;
+use crate::hunger_system::HungerSystem;
 
 const MAX_HEALTH: i32 = 20;
+const MAX_HUNGER: i32 = 20;
 const ATTACK_DAMAGE: i32 = 10;
 const ATTACK_COOLDOWN: f64 = 0.6;
 const INDEBTED_ATTACK_REDUCTION: i32 = 3;
@@ -43,6 +45,10 @@ pub struct Rustplayer {
     #[export]
     #[var(get = get_heart_ui)]
     heart_ui: OnEditor<Gd<Heart>>,
+
+    #[export]
+    #[var(get = get_hunger_ui)]
+    hunger_ui: OnEditor<Gd<HungerSystem>>,    
 
     #[export]
     #[var(get = get_health, set = set_health)]
@@ -99,7 +105,9 @@ impl ICharacterBody2D for Rustplayer {
             item_slot: OnEditor::default(),
             is_open: false,
             heart_ui: OnEditor::default(),
+            hunger_ui: OnEditor::default(),
             health: MAX_HEALTH,
+            hunger: MAX_HUNGER,
             camera: OnEditor::default(),
             target_position: Vector2::default(),
             id: i32::default(),
@@ -109,7 +117,6 @@ impl ICharacterBody2D for Rustplayer {
             can_slash: true,
             slash_timer: 0.0,
             attack_area: OnEditor::default(),
-            hunger: 20,
             hunger_drain_timer: 0.0,
             regen_timer: 0.0,
             starvation_timer: 0.0,
@@ -149,6 +156,7 @@ impl ICharacterBody2D for Rustplayer {
         if !is_authority {
             self.camera.make_current();
             self.heart_ui.bind_mut().set_heart_display(self.health);
+            self.hunger_ui.bind_mut().set_hunger_display(self.hunger);
         }
 
         self.attack_area.set_monitoring(true);
@@ -214,6 +222,12 @@ impl ICharacterBody2D for Rustplayer {
                 self.slash_timer = 0.0;
                 self.attack();
                 godot_print!("Player {} performed an attack!", self.id);
+           
+            }
+
+            if input.is_action_just_pressed("eat") {
+                godot_print!("eat action detected!");
+                self.try_eat();
             }
 
             self.tick_attack_cooldown(delta);
@@ -238,6 +252,8 @@ impl ICharacterBody2D for Rustplayer {
             self.tick_confused(delta);
             self.tick_arrested(delta);
         }
+
+
     }
 }
 
@@ -347,6 +363,7 @@ impl Rustplayer {
             if self.hunger > 0 {
                 self.hunger -= 1;
                 godot_print!("Hunger: {}", self.hunger);
+                self.hunger_ui.bind_mut().set_hunger_display(self.hunger);
             }
         }
 
@@ -517,14 +534,17 @@ impl Rustplayer {
     }
 
     #[func]
-    pub fn get_hunger(&self) -> i32 {
-        self.hunger
+    pub fn set_hunger(&mut self, hunger: i32) {
+        self.hunger = hunger.clamp(0, 20);
+        self.hunger_ui.bind_mut().set_hunger_display(self.hunger);
     }
 
     #[func]
-    pub fn set_hunger(&mut self, hunger: i32) {
-        self.hunger = hunger.clamp(0, 20);
-    }
+    pub fn get_hunger(&self) -> i32 {
+        self.hunger
+    }  
+
+
 
     #[func]
     pub fn feed(&mut self, amount: i32) {
@@ -535,6 +555,37 @@ impl Rustplayer {
     #[func]
     pub fn get_heart_ui(&self) -> Gd<Heart> {
         self.heart_ui.clone()
+    }
+
+    #[func]
+    pub fn get_hunger_ui(&self) -> Gd<HungerSystem> {
+        self.hunger_ui.clone()
+    }
+    fn try_eat(&mut self) {
+        let mut item = self.item_right.bind().get_item();
+        godot_print!("item name: {}", item.bind().get_name());
+        godot_print!("hunger_value: {}", item.bind().get_hunger_value());
+
+        if item.is_instance_valid() {
+            godot_print!("try_eat called!");
+            let hunger_value = item.bind().get_hunger_value();
+            if hunger_value > 0 {
+                item.bind_mut().consume_one();
+                let amount_left = item.bind().get_amount();
+                if amount_left <= 0 {
+                    self.item_right.bind_mut().clear_item();
+                }
+                drop(item);
+                self.inv.emit_signal("update", &[]);
+                self.feed(hunger_value);
+                self.hunger_ui.bind_mut().set_hunger_display(self.hunger);
+                godot_print!("Ate item, hunger +{}, hunger now: {}", hunger_value, self.hunger);
+            } else {
+                godot_print!("Item is not edible.");
+            }
+        } else {
+            godot_print!("No item in hand.");
+        }
     }
 }
 

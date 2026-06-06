@@ -2,6 +2,8 @@ pub mod entity;
 mod example;
 pub mod heart;
 pub mod heart_display;
+mod hunger_system;
+mod hunger_display;
 mod inv_slot;
 mod inventory;
 mod item_collectibles;

@@ -13,13 +13,21 @@ func _ready() -> void:
 func _updated():
 	var inventory_slot : InvSlot = _inv.slots[_index]
 	_slots[0].update_to_slot(inventory_slot)
-	print("happpe")
+	call_deferred("_refresh_player_item", inventory_slot)
+
+func _refresh_player_item(inventory_slot: InvSlot):
+	var player = get_tree().get_first_node_in_group("player")
+	if player:
+		player.item_right.set_item(inventory_slot.item)
 
 func selected_item(item_index):
 	_index = item_index
 	var inventory_slot : InvSlot = _inv.slots[_index]
 	_slots[0].update_to_slot(inventory_slot)
-	print("happpe")
+	var player = get_tree().get_first_node_in_group("player")
+	if player:
+		player.item_right.set_item(inventory_slot.item)
+		_inv.emit_signal("update")
 
 func get_inv() -> Inventory:
 	return _inv

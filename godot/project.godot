@@ -28,7 +28,7 @@ EventBus="*uid://uto40usis8fy"
 ItemSpawner="*uid://crv7ksxwlyblx"
 ConsequenceSystem="*uid://ddjekmj8l73kt"
 MusicManager="*uid://i6ewo42qlhf1"
-SpawnManager="*uid://jsgwaa620icw"
+SpawnManager="*res://Mobs/Spawning/SpawnManager.tscn"
 
 [display]
 

@@ -9,7 +9,6 @@ mod inventory;
 mod item_collectibles;
 mod item_slot;
 mod main_node;
-// mod missing_setters;
 pub mod mobs;
 mod multiplayer_scene;
 mod node_manager;

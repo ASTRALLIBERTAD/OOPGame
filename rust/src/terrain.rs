@@ -1,3 +1,4 @@
+use crate::biome;
 use crate::main_node::MainNode;
 use godot::classes::DirAccess;
 use godot::classes::{
@@ -101,6 +102,12 @@ pub struct Terrain1 {
     moisture: Gd<FastNoiseLite>,
     temperature: Gd<FastNoiseLite>,
     altitude: Gd<FastNoiseLite>,
+    biome: Gd<FastNoiseLite>,
+    variant: Gd<FastNoiseLite>,
+    // Stage 3: a second TileMapLayer (created at runtime) for decorations drawn above
+    // the ground. None until `ready()` builds it. (Decorations are anchor-hash based,
+    // so they need no dedicated noise instances.)
+    decoration_layer: Option<Gd<TileMapLayer>>,
     player_chunks: HashMap<i32, HashSet<Vector2i>>,
     player_positions: HashMap<i32, Vector2i>,
     chunk_cache: HashMap<Vector2i, ChunkData>,
@@ -132,6 +139,9 @@ impl ITileMapLayer for Terrain1 {
             moisture: FastNoiseLite::new_gd(),
             temperature: FastNoiseLite::new_gd(),
             altitude: FastNoiseLite::new_gd(),
+            biome: FastNoiseLite::new_gd(),
+            variant: FastNoiseLite::new_gd(),
+            decoration_layer: None,
             player_chunks: HashMap::new(),
             player_positions: HashMap::new(),
             chunk_cache: HashMap::new(),
@@ -163,6 +173,27 @@ impl ITileMapLayer for Terrain1 {
         self.moisture.set_seed(randi() as i32);
         self.temperature.set_seed(randi() as i32);
         self.altitude.set_frequency(0.01);
+        // Biome noise: deterministic from world_seed, low frequency -> large regions.
+        self.biome
+            .set_seed(self.world_seed.wrapping_add(biome::BIOME_SEED_OFFSET));
+        self.biome.set_frequency(biome::BIOME_FREQUENCY);
+        // Variant noise: deterministic, different offset, medium frequency -> patches.
+        self.variant
+            .set_seed(self.world_seed.wrapping_add(biome::VARIANT_SEED_OFFSET));
+        self.variant.set_frequency(biome::VARIANT_FREQUENCY);
+        // Decorations are anchor-based: clusters are derived from deterministic hashes
+        // of world_seed (see biome.rs), so there are no extra noise instances to seed.
+
+        // Stage 3: build the decoration layer at runtime (no scene edits). It shares
+        // the ground TileSet and draws above the ground via a higher z_index.
+        if self.decoration_layer.is_none() {
+            let tile_set = self.base_mut().get_tile_set();
+            let mut deco = TileMapLayer::new_alloc();
+            deco.set_tile_set(tile_set.as_ref());
+            deco.set_z_index(1);
+            self.base_mut().add_child(&deco);
+            self.decoration_layer = Some(deco);
+        }
         godot_print!("Terrain1 ready with seed: {}", self.world_seed);
     }
 
@@ -251,6 +282,10 @@ impl Terrain1 {
     pub fn sync_seed(&mut self, seed: i32) {
         self.world_seed = seed;
         self.altitude.set_seed(self.world_seed);
+        self.biome
+            .set_seed(self.world_seed.wrapping_add(biome::BIOME_SEED_OFFSET));
+        self.variant
+            .set_seed(self.world_seed.wrapping_add(biome::VARIANT_SEED_OFFSET));
         godot_print!("Terrain1 synced callable seed: {}", seed);
     }
 
@@ -391,6 +426,91 @@ impl Terrain1 {
         Self::get_chunk_coord_static(pos)
     }
 
+    // Stage 3.5: choose the tile for a WATER cell -- the shallow/shore tile if any of its
+    // 8 neighbours is land, else the deep tile. Neighbours are sampled in WORLD coords
+    // from the altitude noise, so shorelines stay seamless across chunk seams (a
+    // neighbour's altitude is available even if its chunk isn't generated yet).
+    #[inline]
+    fn water_tile(&self, wx: i32, wy: i32) -> V2i {
+        const NEIGHBORS: [(i32, i32); 8] = [
+            (1, 0),
+            (-1, 0),
+            (0, 1),
+            (0, -1),
+            (1, 1),
+            (1, -1),
+            (-1, 1),
+            (-1, -1),
+        ];
+        for (dx, dy) in NEIGHBORS {
+            if self
+                .altitude
+                .get_noise_2d((wx + dx) as f32, (wy + dy) as f32)
+                >= 0.1
+            {
+                let (sx, sy) = biome::SHORE_WATER_TILE; // touches land -> shallow
+                return V2i { x: sx, y: sy };
+            }
+        }
+        let (dx, dy) = biome::DEEP_WATER_TILE; // surrounded by water -> deep
+        V2i { x: dx, y: dy }
+    }
+
+    // Stage 3: place (or skip) the deterministic decoration for one world cell on the
+    // decoration layer. Re-derived from the decoration noise + per-cell hash, so fresh
+    // generation and chunk reload produce identical groves. Water cells get nothing.
+    // `deco_layer` is a cheap handle clone so this borrows `&self` only.
+    #[inline]
+    fn place_decoration(&self, deco_layer: &mut Option<Gd<TileMapLayer>>, cell: Vector2i) {
+        let Some(layer) = deco_layer.as_mut() else {
+            return;
+        };
+        // Target must be on land (water never decorates).
+        if self.altitude.get_noise_2d(cell.x as f32, cell.y as f32) < 0.1 {
+            return;
+        }
+        // Scan a (2R+1)^2 window in WORLD coords for the nearest cluster anchor, so
+        // clusters spill across chunk borders seamlessly. The anchor hash is the cheap
+        // gate; only sample altitude/biome for the rare hash-passers.
+        let r = biome::CLUSTER_RADIUS;
+        let mut best: Option<(f32, biome::Biome, i32, i32)> = None;
+        for ay in (cell.y - r)..=(cell.y + r) {
+            for ax in (cell.x - r)..=(cell.x + r) {
+                let roll = biome::anchor_hash_roll(ax, ay, self.world_seed);
+                if roll >= biome::ANCHOR_COARSE_CHANCE {
+                    continue;
+                }
+                let a_alt = self.altitude.get_noise_2d(ax as f32, ay as f32);
+                if a_alt < 0.1 {
+                    continue; // anchors are on land only
+                }
+                let a_biome = biome::select_biome(self.biome.get_noise_2d(ax as f32, ay as f32));
+                if roll >= biome::anchor_effective_chance(a_biome, a_alt) {
+                    continue; // failed the biome/altitude-scaled confirm
+                }
+                let dx = (ax - cell.x) as f32;
+                let dy = (ay - cell.y) as f32;
+                let dist = (dx * dx + dy * dy).sqrt();
+                if dist <= r as f32 && best.map_or(true, |(bd, ..)| dist < bd) {
+                    best = Some((dist, a_biome, ax, ay));
+                }
+            }
+        }
+        let Some((dist, a_biome, ax, ay)) = best else {
+            return; // bare ground between clusters
+        };
+        let Some((dx, dy)) =
+            biome::cluster_decoration(a_biome, ax, ay, dist, cell.x, cell.y, self.world_seed)
+        else {
+            return;
+        };
+        layer
+            .set_cell_ex(cell)
+            .source_id(biome::BIOME_SOURCE_ID)
+            .atlas_coords(Vector2i::new(dx, dy))
+            .done();
+    }
+
     // Renamed to be explicit about immediate generation
     fn generate_chunk_immediate(&mut self, chunk_pos: Vector2i) {
         if self.loaded_chunks.contains(&chunk_pos) {
@@ -411,15 +531,26 @@ impl Terrain1 {
         let noise_map = self.generate_noise_map(chunk_pos);
         let start_x = chunk_pos.x * CHUNK_SIZE;
         let start_y = chunk_pos.y * CHUNK_SIZE;
+        let mut deco_layer = self.decoration_layer.clone();
 
         // Set tiles directly without batching for better performance
         for y in 0..CHUNK_SIZE {
             for x in 0..CHUNK_SIZE {
                 let noise = noise_map[ChunkData::index(x as usize, y as usize)];
                 let (source_id, coords) = if noise < 0.1 {
-                    (1, V2i { x: 0, y: 11 })
+                    // Below the altitude threshold: water. Shallow tile if it touches
+                    // land (Stage 3.5 shoreline), deep tile otherwise.
+                    (1, self.water_tile(start_x + x, start_y + y))
                 } else {
-                    (2, V2i { x: 1, y: 0 })
+                    // Land: pick this cell's Luzon biome from the low-freq biome
+                    // noise, then its variant tile from the medium-freq variant
+                    // noise (same cell) so variants cluster into small patches.
+                    let fx = (start_x + x) as f32;
+                    let fy = (start_y + y) as f32;
+                    let selected = biome::select_biome(self.biome.get_noise_2d(fx, fy));
+                    let vnoise = self.variant.get_noise_2d(fx, fy);
+                    let (tx, ty) = selected.variant_tile(vnoise);
+                    (biome::BIOME_SOURCE_ID, V2i { x: tx, y: ty })
                 };
 
                 chunk.tiles[ChunkData::index(x as usize, y as usize)] = coords;
@@ -431,6 +562,9 @@ impl Terrain1 {
                     .source_id(source_id)
                     .atlas_coords(coords.into())
                     .done();
+
+                // Stage 3: scatter a clustered decoration on the second layer (land only).
+                self.place_decoration(&mut deco_layer, tile_pos);
             }
         }
 
@@ -473,6 +607,7 @@ impl Terrain1 {
 
         // Batch clear operations for better performance
         let empty_coords = Vector2i::new(-1, -1);
+        let mut deco_layer = self.decoration_layer.clone();
 
         for x in 0..CHUNK_SIZE {
             for y in 0..CHUNK_SIZE {
@@ -483,6 +618,11 @@ impl Terrain1 {
                     .atlas_coords(empty_coords)
                     .alternative_tile(-1)
                     .done();
+                // Stage 3: clear the decoration layer for this cell too, so groves
+                // vanish with the chunk instead of lingering/floating.
+                if let Some(layer) = deco_layer.as_mut() {
+                    layer.erase_cell(position);
+                }
             }
         }
     }
@@ -551,19 +691,33 @@ impl Terrain1 {
         chunk.last_accessed = std::time::Instant::now();
         let start_x = chunk_pos.x * CHUNK_SIZE;
         let start_y = chunk_pos.y * CHUNK_SIZE;
+        let mut deco_layer = self.decoration_layer.clone();
 
         // Batch tile restoration
         for y in 0..CHUNK_SIZE {
             for x in 0..CHUNK_SIZE {
-                let coords = chunk.get(x as usize, y as usize);
+                let pos = Vector2i::new(start_x + x, start_y + y);
+                let saved = chunk.get(x as usize, y as usize);
+                // Stage 3.5: re-derive water tiles so shorelines show identically on
+                // reload (they are not authoritatively saved). Land tiles and any
+                // player-placed tiles are restored exactly as saved.
+                let is_water = (saved.x, saved.y) == biome::DEEP_WATER_TILE
+                    || (saved.x, saved.y) == biome::SHORE_WATER_TILE;
+                let coords = if is_water {
+                    self.water_tile(pos.x, pos.y)
+                } else {
+                    saved
+                };
                 if coords.x >= 0 {
-                    let pos = Vector2i::new(start_x + x, start_y + y);
                     self.base_mut()
                         .set_cell_ex(pos)
                         .source_id(1)
                         .atlas_coords(coords.into())
                         .done();
                 }
+                // Stage 3: re-derive decorations from noise (they are not saved) so
+                // reloaded chunks show identical clusters to freshly generated ones.
+                self.place_decoration(&mut deco_layer, pos);
             }
         }
 

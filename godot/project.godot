@@ -17,7 +17,7 @@ run/main_scene="uid://bjwmcugftnsby"
 run/enable_alt_space_menu=true
 config/features=PackedStringArray("4.6", "GL Compatibility")
 run/max_fps=1000
-boot_splash/image="uid://nxdc5k31dlg1"
+boot_splash/image="uid://yhakrwewdhxd"
 config/icon="res://Assets/PixelUIButtons/PlayButton.png"
 
 [autoload]
@@ -36,6 +36,10 @@ window/stretch/mode="canvas_items"
 window/stretch/aspect="ignore"
 window/per_pixel_transparency/allowed=true
 display_server/driver.linuxbsd="wayland"
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/gut/plugin.cfg")
 
 [global_group]
 

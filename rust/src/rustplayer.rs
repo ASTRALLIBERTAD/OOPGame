@@ -328,8 +328,8 @@ impl Entity for Rustplayer {
 
         if !self.is_alive() {
             godot_print!("player dead");
-            // self.playing_oneshot = true;
-            // self.sprite.play_ex().name("death").done();
+            self.playing_oneshot = true;
+            self.sprite.play_ex().name("death").done();
         }
     }
 

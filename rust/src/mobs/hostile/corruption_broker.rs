@@ -22,6 +22,7 @@ const FLEE_DISTANCE: f32 = 420.0;
 #[derive(GodotClass)]
 #[class(base=CharacterBody2D)]
 pub struct CorruptionBroker {
+
     #[base]
     base: Base<CharacterBody2D>,
 

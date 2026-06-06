@@ -1,10 +1,10 @@
 use godot::classes::{
-    AnimatedSprite2D, Area2D, BoxContainer, Camera2D, CanvasLayer, CharacterBody2D, Control,
-    ICharacterBody2D, Input, Label,
+    AnimatedSprite2D, Area2D, AudioStreamPlayer, BoxContainer, Camera2D, CanvasLayer, CharacterBody2D, Control, ICharacterBody2D, Input, Label
 };
 use godot::obj::WithBaseField;
 use godot::prelude::*;
 use godot::tools::get_autoload_by_name;
+
 use std::str::FromStr;
 
 use crate::armor_system::ArmorSystem;
@@ -85,6 +85,12 @@ pub struct Rustplayer {
     #[var(get = get_hunger, set = set_hunger)]
     hunger: i32,
 
+    #[export]
+    audio_walk1: OnEditor<Gd<AudioStreamPlayer>>,
+
+    #[export]
+    audio_walk2: OnEditor<Gd<AudioStreamPlayer>>,
+
     hunger_drain_timer: f64,
     regen_timer: f64,
     starvation_timer: f64,
@@ -136,6 +142,8 @@ impl ICharacterBody2D for Rustplayer {
             attack_area: OnEditor::default(),
             shop_ui: OnEditor::default(),
             hunger: 20,
+            audio_walk1: OnEditor::default(),
+            audio_walk2: OnEditor::default(),
             hunger_drain_timer: 0.0,
             regen_timer: 0.0,
             starvation_timer: 0.0,
@@ -217,11 +225,18 @@ impl ICharacterBody2D for Rustplayer {
                 direction * speed
             };
 
+            if self.base_mut().get_velocity() == Vector2::ZERO {
+                self.audio_walk1.stop();
+                self.audio_walk2.stop();
+            }
+
             if input.is_action_just_pressed(&StringName::from_str("left").unwrap()) {
                 self.sprite.set_flip_h(true);
+                self.audio_walk1.play();
             }
             if input.is_action_just_pressed(&StringName::from_str("right").unwrap()) {
                 self.sprite.set_flip_h(false);
+                self.audio_walk2.play();
             }
 
             if self.arrested {
@@ -326,6 +341,8 @@ impl Entity for Rustplayer {
 
         self.inv.bind_mut().signals().update().emit();
 
+        let mut audi_player = self.base().get_node_as::<AudioStreamPlayer>("AudioStreamPlayer");
+        audi_player.play(); 
         if !self.is_alive() {
             godot_print!("player dead");
             // self.playing_oneshot = true;

@@ -1,4 +1,4 @@
-use godot::classes::{AnimatedSprite2D, Area2D, CharacterBody2D, ICharacterBody2D};
+use godot::classes::{AnimatedSprite2D, Area2D,CharacterBody2D, ICharacterBody2D};
 use godot::obj::WithBaseField;
 use godot::prelude::*;
 

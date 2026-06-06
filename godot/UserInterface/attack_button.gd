@@ -18,3 +18,4 @@ func _ready() -> void:
 
 func _on_attack_pressed() -> void:
 	Input.action_press("attack")
+	$AudioStreamPlayer.play()

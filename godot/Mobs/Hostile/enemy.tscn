@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" uid="uid://baolonatguoje" path="res://Mobs/Hostile/enemy.gd" id="1_px1sc"]
 [ext_resource type="Texture2D" uid="uid://ikadhrdwx0jg" path="res://Assets/brackeys_platformer_assets/brackeys_platformer_assets/sprites/slime_green.png" id="2_am0pq"]
+[ext_resource type="AudioStream" uid="uid://b7gmvqrxvxioo" path="res://Assets/Audio/enemy_dead.wav" id="3_urmde"]
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_eqilm"]
 atlas = ExtResource("2_am0pq")
@@ -114,3 +115,6 @@ shape = SubResource("RectangleShape2D_sbh3k")
 [node name="CollisionShape2D" type="CollisionShape2D" parent="Area2D" unique_id=893505122]
 position = Vector2(0, 5.5)
 shape = SubResource("RectangleShape2D_sbh3k")
+
+[node name="AudioStreamPlayer" type="AudioStreamPlayer" parent="." unique_id=1603311042]
+stream = ExtResource("3_urmde")

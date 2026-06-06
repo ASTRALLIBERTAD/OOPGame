@@ -79,6 +79,9 @@ pub struct Rustplayer {
     attack_area: OnEditor<Gd<Area2D>>,
 
     #[export]
+    shop_ui: OnEditor<Gd<Control>>,
+
+    #[export]
     #[var(get = get_hunger, set = set_hunger)]
     hunger: i32,
 
@@ -131,6 +134,7 @@ impl ICharacterBody2D for Rustplayer {
             can_slash: true,
             slash_timer: 0.0,
             attack_area: OnEditor::default(),
+            shop_ui: OnEditor::default(),
             hunger: 20,
             hunger_drain_timer: 0.0,
             regen_timer: 0.0,
@@ -262,7 +266,10 @@ impl ICharacterBody2D for Rustplayer {
             self.base_mut()
                 .rpc("update_position", &[Variant::from(pos)]);
 
-            if input.is_action_just_pressed("attack") && self.can_slash {
+            if input.is_action_just_pressed("attack")
+                && self.can_slash
+                && !self.shop_ui.is_visible()
+            {
                 self.can_slash = false;
                 self.slash_timer = 0.0;
                 self.attack();

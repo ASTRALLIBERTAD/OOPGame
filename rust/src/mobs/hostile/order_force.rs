@@ -98,20 +98,10 @@ impl ICharacterBody2D for OrderForce {
         self.tick_arrest(delta);
         self.check_boss_influence();
 
-        let my_pos = self.base_mut().get_global_position();
-        let Some(player_node) = self
-            .base_mut()
-            .get_tree()
-            .get_nodes_in_group("player")
-            .get(0)
-        else {
+        let Some((target_gd, distance)) = self.nearest_target() else {
             return;
         };
-        let Ok(player_gd) = player_node.try_cast::<CharacterBody2D>() else {
-            return;
-        };
-        let player_pos = player_gd.get_global_position();
-        let distance = my_pos.distance_to(player_pos);
+        let target_pos = target_gd.get_global_position();
 
         if distance > self.aggro_range {
             self.mob_state = MobState::Idle;
@@ -123,7 +113,7 @@ impl ICharacterBody2D for OrderForce {
             return;
         }
 
-        self.aggro(player_pos);
+        self.aggro(target_pos);
 
         if self.playing_oneshot || self.arresting {
             self.base_mut().set_velocity(Vector2::ZERO);
@@ -131,20 +121,21 @@ impl ICharacterBody2D for OrderForce {
             return;
         }
 
-        self.chase(player_pos, self.speed);
+        self.chase(target_pos, self.speed);
 
         if distance <= 40.0 && self.can_slash {
-            if let Ok(mut player) = player_gd.try_cast::<Rustplayer>() {
-                let dmg = self.effective_damage();
+            let dmg = self.effective_damage();
+            if let Ok(mut player) = target_gd.clone().try_cast::<Rustplayer>() {
                 player.bind_mut().take_damage(dmg);
                 godot_print!("Puersa ng Orden strikes for {} damage!", dmg);
-
                 if self.boss_nearby && !player.bind().is_arrested() {
                     player.bind_mut().apply_arrested(ARREST_DURATION);
                     self.arresting = true;
                     self.arrest_timer = 0.0;
                     godot_print!("Puersa ng Orden: 'You are under arrest!'");
                 }
+            } else {
+                self.deal_damage_to_civilian(target_gd, dmg);
             }
             self.playing_oneshot = true;
             self.sprite.play_ex().name("attack").done();
@@ -203,6 +194,57 @@ impl HostileBehavior for OrderForce {
 
 #[godot_api]
 impl OrderForce {
+    fn nearest_target(&mut self) -> Option<(Gd<CharacterBody2D>, f32)> {
+        let my_pos = self.base_mut().get_global_position();
+        let mut nearest: Option<(Gd<CharacterBody2D>, f32)> = None;
+        for group in ["player", "civilian", "neutral"] {
+            for node in self
+                .base_mut()
+                .get_tree()
+                .get_nodes_in_group(group)
+                .iter_shared()
+            {
+                if let Ok(body) = node.try_cast::<CharacterBody2D>() {
+                    let dist = my_pos.distance_to(body.get_global_position());
+                    if nearest.as_ref().map_or(true, |(_, d)| dist < *d) {
+                        nearest = Some((body, dist));
+                    }
+                }
+            }
+        }
+        nearest
+    }
+
+    fn deal_damage_to_civilian(&mut self, body: Gd<CharacterBody2D>, damage: i32) {
+        if let Ok(mut farmer) = body
+            .clone()
+            .try_cast::<crate::mobs::passive::farmer::Farmer>()
+        {
+            farmer.bind_mut().take_damage(damage);
+        } else if let Ok(mut priest) = body
+            .clone()
+            .try_cast::<crate::mobs::passive::priest::Priest>()
+        {
+            priest.bind_mut().take_damage(damage);
+        } else if let Ok(mut ofw) = body.clone().try_cast::<crate::mobs::passive::ofw::Ofw>() {
+            ofw.bind_mut().take_damage(damage);
+        } else if let Ok(mut trader) =
+            body.clone()
+                .try_cast::<crate::mobs::neutral::roaming_trader::RoamingTrader>()
+        {
+            trader.bind_mut().take_damage(damage);
+        } else if let Ok(mut student) = body
+            .clone()
+            .try_cast::<crate::mobs::neutral::student::Student>()
+        {
+            student.bind_mut().take_damage(damage);
+        } else if let Ok(mut journalist) =
+            body.try_cast::<crate::mobs::neutral::journalist::Journalist>()
+        {
+            journalist.bind_mut().take_damage(damage);
+        }
+    }
+
     fn effective_damage(&self) -> i32 {
         if self.boss_nearby {
             self.attack_damage + INFLUENCE_DAMAGE_BONUS

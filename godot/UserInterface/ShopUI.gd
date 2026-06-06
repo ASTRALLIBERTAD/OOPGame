@@ -170,7 +170,7 @@ func _on_buy(entry: Dictionary, price: int):
 		return
 	if player.spend_piso(price):
 		entry["count"] -= 1
-		var scene_path = "res://Collectibles/" + entry["item_id"] + ".tscn"
+		var scene_path = "res://Collectibles/" + entry["item_id"] + ".scn"
 		if ResourceLoader.exists(scene_path):
 			var item_scene = load(scene_path)
 			var item_spawn = item_scene.instantiate()

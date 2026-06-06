@@ -170,6 +170,8 @@ impl Entity for Student {
             return;
         }
         self.health = (self.health - amount).max(0);
+        self.base_mut().set_modulate(Color::from_rgb(1.0, 0.3, 0.3));
+        self.flash_timer = 0.2;
 
         match self.alignment {
             StudentAlignment::Neutral => {
@@ -194,12 +196,13 @@ impl Entity for Student {
 
         if !self.is_alive() {
             self.mob_state = MobState::Dead;
+            self.playing_oneshot = true;
+            self.sprite.play_ex().name("death").done();
             let mut event_bus = get_autoload_by_name::<Node>("EventBus");
             event_bus.call(
                 "emit_signal",
                 &[Variant::from(GString::from("civilian_killed"))],
             );
-            self.base_mut().queue_free();
         }
     }
 

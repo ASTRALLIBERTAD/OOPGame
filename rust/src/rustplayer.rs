@@ -90,6 +90,7 @@ pub struct Rustplayer {
 
     #[export]
     audio_walk2: OnEditor<Gd<AudioStreamPlayer>>,
+    death_ui: OnEditor<Gd<Control>>,
 
     hunger_drain_timer: f64,
     regen_timer: f64,
@@ -144,6 +145,7 @@ impl ICharacterBody2D for Rustplayer {
             hunger: 20,
             audio_walk1: OnEditor::default(),
             audio_walk2: OnEditor::default(),
+            death_ui: OnEditor::default(),
             hunger_drain_timer: 0.0,
             regen_timer: 0.0,
             starvation_timer: 0.0,
@@ -345,8 +347,11 @@ impl Entity for Rustplayer {
         audi_player.play(); 
         if !self.is_alive() {
             godot_print!("player dead");
-            // self.playing_oneshot = true;
-            // self.sprite.play_ex().name("death").done();
+            self.playing_oneshot = true;
+            self.sprite.play_ex().name("death").done();
+
+            self.death_ui.set_visible(true);
+            self.base_mut().get_tree().set_pause(true);
         }
     }
 

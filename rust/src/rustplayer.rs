@@ -1,5 +1,6 @@
 use godot::classes::{
-    AnimatedSprite2D, Area2D, AudioStreamPlayer, BoxContainer, Camera2D, CanvasLayer, CharacterBody2D, Control, ICharacterBody2D, Input, Label
+    AnimatedSprite2D, Area2D, AudioStreamPlayer, BoxContainer, Camera2D, CanvasLayer,
+    CharacterBody2D, Control, ICharacterBody2D, Input, Label,
 };
 use godot::obj::WithBaseField;
 use godot::prelude::*;
@@ -90,6 +91,8 @@ pub struct Rustplayer {
 
     #[export]
     audio_walk2: OnEditor<Gd<AudioStreamPlayer>>,
+
+    #[export]
     death_ui: OnEditor<Gd<Control>>,
 
     hunger_drain_timer: f64,
@@ -343,8 +346,10 @@ impl Entity for Rustplayer {
 
         self.inv.bind_mut().signals().update().emit();
 
-        let mut audi_player = self.base().get_node_as::<AudioStreamPlayer>("AudioStreamPlayer");
-        audi_player.play(); 
+        let mut audi_player = self
+            .base()
+            .get_node_as::<AudioStreamPlayer>("AudioStreamPlayer");
+        audi_player.play();
         if !self.is_alive() {
             godot_print!("player dead");
             self.playing_oneshot = true;
@@ -818,3 +823,4 @@ impl Rustplayer {
         );
     }
 }
+
